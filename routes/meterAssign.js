@@ -60,6 +60,7 @@ router.post("/", async (req, res) => {
       agency,
       installerId,
       supervisor: user._id,
+      pkg:user.pkg
     }));
     const existing = await MeterDB.find({
       meterNumber: { $in: meterNumber },
@@ -79,6 +80,7 @@ router.post("/", async (req, res) => {
       data: { metersData },
       message: "Meters assigned successfully",
     });
+    console.log(metersData);
   } catch (error) {
     console.error(error);
     res.status(500).json({ status: "error", message: "Server error" });

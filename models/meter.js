@@ -7,11 +7,13 @@ const MeterSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-
+    pkg: {
+      type:String,
+      enum: ["ASS1", "ASS2", "ASS3", "ASS4", "ASS5", "ASS6", "ASS7", "ASS8", "ASS9", "ASS10"],
+    },
     supervisor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
 
     equipCategory: {
@@ -38,7 +40,7 @@ const MeterSchema = new mongoose.Schema(
     installationType: {
       type: String,
       enum: ["DTMeter", "FeederMeter", "HTCT", "LTCT", "LTWC"],
-      required: true,
+      default: "LTWC",
     },
 
     storeLocation: {
@@ -60,7 +62,7 @@ const MeterSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["active", "pending", "rejected"],
+      enum: ["active", "pending", "installed", "rejected"],
       default: "pending",
     },
   },

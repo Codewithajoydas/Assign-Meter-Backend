@@ -24,6 +24,8 @@ app.use('/api/getmeterdetails', require('./routes/getMeterDetails'));
 app.use("/api/nicassign", require("./routes/nicAssign"));
 app.use("/api/simassign", require("./routes/simAssign"));
 app.use("/api/sealassign", require("./routes/sealAssign"));
+app.use("/api/download", require("./routes/download"));
+app.use("/api/searchmeter", require("./routes/searchMeter"));
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log("server is running on port", port);

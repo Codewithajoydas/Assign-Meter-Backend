@@ -4,41 +4,124 @@ const MeterDB = require("../models/meter");
 const UserDB = require("../models/user");
 const jwt = require("jsonwebtoken");
 
-// status enum: ["active", "pending", "rejected"]
-
 router.get("/:status", async (req, res) => {
-  const { status } = req.params;
-
   try {
-    const token = req?.headers?.authorization?.split(" ")[1];
+    const { status } = req.params;
 
-    if (!token) {
-      return res
-        .status(401)
-        .json({ status: "error", message: "Token missing" });
+    // ---------------- PAGINATION ----------------
+    let pageNumber = parseInt(req.query.pageNumber) || 1;
+    let limit = parseInt(req.query.limit) || 10;
+    let sort = req.query.sort === "asc" ? "asc" : "desc";
+
+    pageNumber = Math.max(pageNumber, 1);
+    limit = Math.min(Math.max(limit, 1), 100);
+
+    // ---------------- QUERY PARAMS ----------------
+    const agency =
+      typeof req.query.agency === "string" ? req.query.agency : null;
+    const store = typeof req.query.store === "string" ? req.query.store : null;
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+    const meterType =
+      typeof req.query.meterType === "string" ? req.query.meterType : null;
+    const installationType =
+      typeof req.query.installationType === "string"
+        ? req.query.installationType
+        : null;
+
+    // ---------------- TOKEN ----------------
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({
+        status: "error",
+        message: "Token missing",
+      });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const token = authHeader.split(" ")[1];
 
-    const user = await UserDB.findById(decoded.id);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid token",
+      });
+    }
+
+    const user = await UserDB.findById(decoded.id).lean();
 
     if (!user) {
-      return res.status(401).json({ status: "error", message: "Unauthorized" });
+      return res.status(401).json({
+        status: "error",
+        message: "Unauthorized",
+      });
     }
 
-    const meters = await MeterDB.find({
-      supervisor: user._id,
-      status: status,
-    });
+    // ---------------- STATUS ----------------
+    const allowedStatus = ["active", "pending", "installed", "rejected"];
 
-    res.status(200).json({
+    const finalStatus = allowedStatus.includes(status.toLowerCase())
+      ? status.toLowerCase()
+      : "pending";
+
+    // ---------------- FILTER ----------------
+    const filter = {
+      status: finalStatus,
+    };
+
+    if (store) filter.storeLocation = store; // FIXED
+    if (agency) filter.agency = agency;
+    if (meterType) filter.meterType = meterType;
+    if (installationType) filter.installationType = installationType;
+
+    // ---------------- DATE FILTER ----------------
+    if (startDate || endDate) {
+      filter.createdAt = {};
+
+      if (startDate) {
+        filter.createdAt.$gte = new Date(startDate);
+      }
+
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // FIXED
+        filter.createdAt.$lte = end;
+      }
+    }
+
+    // ---------------- PKG FILTER ----------------
+    if (user.pkg) {
+      filter.pkg = user.pkg;
+    }
+
+    // ---------------- QUERY ----------------
+    const meters = await MeterDB.find(filter)
+      .sort({ createdAt: sort === "asc" ? 1 : -1 })
+      .skip((pageNumber - 1) * limit)
+      .limit(limit)
+      .lean();
+
+    const totalData = await MeterDB.countDocuments(filter);
+    const totalPages = Math.ceil(totalData / limit);
+
+    return res.status(200).json({
       status: "success",
       count: meters.length,
       data: meters,
+      totalPages,
+      currentPage: pageNumber,
+      totalData,
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ status: "error", message: "Server error" });
+
+    return res.status(500).json({
+      status: "error",
+      message: "Server error",
+    });
   }
 });
 

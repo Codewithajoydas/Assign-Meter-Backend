@@ -21,6 +21,9 @@ const userSchema = new mongoose.Schema(
       required: true,
       default: false,
     },
+    pkg: {
+        enum: ["ASS1", "ASS2", "ASS3", "ASS4", "ASS5", "ASS6", "ASS7", "ASS8", "ASS9", "ASS10"],
+      },
   },
   {
     timestamps: true,
