@@ -2,6 +2,9 @@ const express = require("express");
 const app = express();
 require("dotenv").config();
 const connectToMongo = require("./config/mongoose");
+const cookieParser = require("cookie-parser");
+app.use(cookieParser()); 
+ 
 
 connectToMongo();
 const cors = require("cors");
@@ -26,6 +29,8 @@ app.use("/api/simassign", require("./routes/simAssign"));
 app.use("/api/sealassign", require("./routes/sealAssign"));
 app.use("/api/download", require("./routes/download"));
 app.use("/api/searchmeter", require("./routes/searchMeter"));
+app.use("/api/createuser", require("./routes/createUser"));
+
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log("server is running on port", port);
