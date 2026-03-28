@@ -10,7 +10,7 @@ connectToMongo();
 const cors = require("cors");
 app.use(
   cors({
-    origin: ["exp://192.168.29.152:8081", "https://assign-meter-web.vercel.app"],
+    origin: ["exp://192.168.29.152:8081", "https://assign-meter-web.vercel.app", "http://localhost:3001"],
     credentials: true,
   }),
 );
