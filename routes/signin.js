@@ -49,6 +49,7 @@ router.post("/", async (req, res) => {
       httpOnly: true,
       sameSite: "none",
       secure: true,
+      path:"/"
     }).json({
       status: "success",
       data: { token, user: userData },
