@@ -10,7 +10,7 @@ connectToMongo();
 const cors = require("cors");
 app.use(
   cors({
-    origin: ["exp://192.168.29.152:8081", "http://localhost:3001"],
+    origin: ["exp://192.168.29.152:8081", "https://assign-meter-web.vercel.app"],
     credentials: true,
   }),
 );
@@ -30,7 +30,7 @@ app.use("/api/sealassign", require("./routes/sealAssign"));
 app.use("/api/download", require("./routes/download"));
 app.use("/api/searchmeter", require("./routes/searchMeter"));
 app.use("/api/createuser", require("./routes/createUser"));
-
+app.use("/api/statusupdate", require("./routes/updateMeterStatus"));
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log("server is running on port", port);
