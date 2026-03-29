@@ -44,13 +44,7 @@ router.post("/", async (req, res) => {
       isAdmin: user.isAdmin,
     };
 
-    res.status(200).cookie("token", token, {
-      expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      httpOnly: true,
-      sameSite: "none",
-      secure: true,
-      path:"/"
-    }).json({
+    res.status(200).json({
       status: "success",
       data: { token, user: userData },
     });
