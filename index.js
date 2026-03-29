@@ -8,9 +8,21 @@ app.use(cookieParser());
 
 connectToMongo();
 const cors = require("cors");
+const allowedOrigins = [
+  "https://assign-meter-web.vercel.app",
+  "http://localhost:3001",
+  "exp://192.168.29.152:8081",
+];
+
 app.use(
   cors({
-    origin: ["exp://192.168.29.152:8081", "https://assign-meter-web.vercel.app", "http://localhost:3001"],
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, origin); // reflect exact origin
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   }),
 );
