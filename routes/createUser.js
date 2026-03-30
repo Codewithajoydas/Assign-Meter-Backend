@@ -8,9 +8,9 @@ router.post("/", async (req, res) => {
   if (!token)
     return res.status(401).json({ status: "error", message: "Unauthorized" });
 
-  const { name, email, password, isAdmin, pkg } = req.body;
+  const { name, email, password, isAdmin } = req.body;
     console.log(name, email, password, isAdmin, pkg);
-  if (!name || !email || !password || pkg === undefined || isAdmin === undefined) {
+  if (!name || !email || !password || isAdmin === undefined) {
     return res.status(400).json({
       status: "error",
       message: "Please provide all required details",
