@@ -11,7 +11,7 @@ const upload = multer();
 // POST: Upload Excel & update meter status
 router.post("/", upload.single("file"), async (req, res) => {
   try {
-    const token = req.cookies?.token;
+    const token = req.headers.authorization.split(" ")[1];
     const file = req.file;
 
     // 1. Auth check
