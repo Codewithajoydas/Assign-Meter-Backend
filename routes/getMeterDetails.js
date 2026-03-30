@@ -4,9 +4,27 @@ const MeterDB = require("../models/meter");
 const UserDB = require("../models/user");
 const jwt = require("jsonwebtoken");
 
-router.get("/:status", async (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const { status } = req.params;
+    // ---------------- QUERY PARAMS ----------------
+    const status =
+      typeof req.query.status === "string" ? req.query.status : null;
+
+    const agency =
+      typeof req.query.agency === "string" ? req.query.agency : null;
+
+    const store = typeof req.query.store === "string" ? req.query.store : null;
+
+    const meterType =
+      typeof req.query.meterType === "string" ? req.query.meterType : null;
+
+    const installationType =
+      typeof req.query.installationType === "string"
+        ? req.query.installationType
+        : null;
+
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
 
     // ---------------- PAGINATION ----------------
     let pageNumber = parseInt(req.query.pageNumber) || 1;
@@ -15,19 +33,6 @@ router.get("/:status", async (req, res) => {
 
     pageNumber = Math.max(pageNumber, 1);
     limit = Math.min(Math.max(limit, 1), 100);
-
-    // ---------------- QUERY PARAMS ----------------
-    const agency =
-      typeof req.query.agency === "string" ? req.query.agency : null;
-    const store = typeof req.query.store === "string" ? req.query.store : null;
-    const startDate = req.query.startDate;
-    const endDate = req.query.endDate;
-    const meterType =
-      typeof req.query.meterType === "string" ? req.query.meterType : null;
-    const installationType =
-      typeof req.query.installationType === "string"
-        ? req.query.installationType
-        : null;
 
     // ---------------- TOKEN ----------------
     const authHeader = req.headers.authorization;
@@ -44,7 +49,7 @@ router.get("/:status", async (req, res) => {
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (err) {
+    } catch {
       return res.status(401).json({
         status: "error",
         message: "Invalid token",
@@ -63,16 +68,20 @@ router.get("/:status", async (req, res) => {
     // ---------------- STATUS ----------------
     const allowedStatus = ["active", "pending", "installed", "rejected"];
 
-    const finalStatus = allowedStatus.includes(status.toLowerCase())
-      ? status.toLowerCase()
-      : "pending";
+    if (status && !allowedStatus.includes(status.toLowerCase())) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid status value",
+      });
+    }
+
+    const finalStatus = status ? status.toLowerCase() : null;
 
     // ---------------- FILTER ----------------
-    const filter = {
-      status: finalStatus,
-    };
+    const filter = {};
 
-    if (store) filter.storeLocation = store; // FIXED
+    if (finalStatus) filter.status = finalStatus;
+    if (store) filter.storeLocation = store;
     if (agency) filter.agency = agency;
     if (meterType) filter.meterType = meterType;
     if (installationType) filter.installationType = installationType;
@@ -87,7 +96,7 @@ router.get("/:status", async (req, res) => {
 
       if (endDate) {
         const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999); // FIXED
+        end.setHours(23, 59, 59, 999);
         filter.createdAt.$lte = end;
       }
     }
@@ -105,18 +114,17 @@ router.get("/:status", async (req, res) => {
       .lean();
 
     const totalData = await MeterDB.countDocuments(filter);
-    const totalPages = Math.ceil(totalData / limit);
 
     return res.status(200).json({
       status: "success",
       count: meters.length,
       data: meters,
-      totalPages,
+      totalPages: Math.ceil(totalData / limit),
       currentPage: pageNumber,
       totalData,
     });
   } catch (error) {
-    console.error(error);
+    console.error("SERVER ERROR:", error);
 
     return res.status(500).json({
       status: "error",
