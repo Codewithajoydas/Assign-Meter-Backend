@@ -4,12 +4,12 @@ const UserDB = require("../models/user");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 router.post("/", async (req, res) => {
-  const token = req.cookies?.token;
+  const token = req.headers.authorization.split(" ")[1];
   if (!token)
-    return res.status(401).json({ status: "error", message: "Unauthorized" });
+    return res.status(401).json({ status: "error", message: "You are Unauthorized" });
 
   const { name, email, password, isAdmin } = req.body;
-    console.log(name, email, password, isAdmin, pkg);
+    console.log(name, email, password, isAdmin);
   if (!name || !email || !password || isAdmin === undefined) {
     return res.status(400).json({
       status: "error",
