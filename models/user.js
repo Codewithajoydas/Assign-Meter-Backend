@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-        required: true,
+      required: true,
       select: false,
     },
     isAdmin: {
@@ -22,8 +22,21 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
     pkg: {
-        enum: ["ASS1", "ASS2", "ASS3", "ASS4", "ASS5", "ASS6", "ASS7", "ASS8", "ASS9", "ASS10"],
-      },
+      type: String,
+      required: true,
+      enum: [
+        "ASS1",
+        "ASS2",
+        "ASS3",
+        "ASS4",
+        "ASS5",
+        "ASS6",
+        "ASS7",
+        "ASS8",
+        "ASS9",
+        "ASS10",
+      ],
+    },
   },
   {
     timestamps: true,
