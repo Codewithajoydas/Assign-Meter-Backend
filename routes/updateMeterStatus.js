@@ -8,71 +8,98 @@ const multer = require("multer");
 
 const upload = multer();
 
-// POST: Upload Excel & update meter status
 router.post("/", upload.single("file"), async (req, res) => {
   try {
-    const token = req.headers.authorization.split(" ")[1];
-    const file = req.file;
+    // 1. Token extraction
+    const authHeader = req.headers.authorization;
 
-    // 1. Auth check
-    if (!token) {
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({
         status: "error",
-        message: "Unauthorized",
+        message: "Authorization header missing or invalid",
       });
     }
+
+    const token = authHeader.split(" ")[1];
 
     // 2. File check
-    if (!file) {
+    if (!req.file) {
       return res.status(400).json({
         status: "error",
-        message: "Please provide a file",
+        message: "No file uploaded",
       });
     }
 
-    // 3. Verify user
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await UserDB.findById(decoded.id);
+    // 3. JWT verification
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid or expired token",
+      });
+    }
 
+    // 4. User check
+    const user = await UserDB.findById(decoded.id);
     if (!user) {
       return res.status(401).json({
         status: "error",
-        message: "Unauthorized user",
+        message: "User not found",
       });
     }
 
-    // 4. Read Excel file
-    const workbook = XLSX.read(file.buffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    const worksheet = workbook.Sheets[sheetName];
+    // 5. Read Excel
+    let rawData;
+    try {
+      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
 
-    const rawData = XLSX.utils.sheet_to_json(worksheet);
+      if (!workbook.SheetNames.length) {
+        return res.status(400).json({
+          status: "error",
+          message: "Excel file has no sheets",
+        });
+      }
 
-    if (!rawData.length) {
+      const sheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[sheetName];
+
+      rawData = XLSX.utils.sheet_to_json(worksheet);
+    } catch (err) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid Excel file format",
+      });
+    }
+
+    // 6. Empty check
+    if (!rawData || rawData.length === 0) {
       return res.status(400).json({
         status: "error",
         message: "Excel file is empty",
       });
     }
 
-    // 5. Clean + normalize data
+    // 7. Clean data
     const cleanedData = rawData
-      .map((item) => ({
+      .map((item, index) => ({
         meterNumber: String(item.meterNumber || "").trim(),
         status: String(item.status || "")
           .toLowerCase()
           .trim(),
+        row: index + 1,
       }))
       .filter((item) => item.meterNumber && item.status);
 
-    if (!cleanedData.length) {
+    if (cleanedData.length === 0) {
       return res.status(400).json({
         status: "error",
-        message: "No valid data found in file",
+        message: "No valid meterNumber or status found in file",
       });
     }
 
-    // 6. Prepare bulk operations
+    // 8. Bulk operation
     const operations = cleanedData.map((item) => ({
       updateOne: {
         filter: { meterNumber: item.meterNumber },
@@ -80,23 +107,31 @@ router.post("/", upload.single("file"), async (req, res) => {
       },
     }));
 
-    // 7. Execute bulk update
-    const result = await MeterDB.bulkWrite(operations);
+    let result;
+    try {
+      result = await MeterDB.bulkWrite(operations);
+    } catch (err) {
+      return res.status(500).json({
+        status: "error",
+        message: "Database update failed",
+      });
+    }
 
-    // 8. Response
+    // 9. Success response
     return res.json({
       status: "success",
       message: "Meter status updated successfully",
       totalRecords: cleanedData.length,
-      modifiedCount: result.modifiedCount,
       matchedCount: result.matchedCount,
+      modifiedCount: result.modifiedCount,
     });
   } catch (error) {
-    console.error("Upload error:", error);
+    console.error("Unexpected error:", error);
 
     return res.status(500).json({
       status: "error",
-      message: "Something went wrong",
+      message: "Unexpected server error",
+      debug: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 });
