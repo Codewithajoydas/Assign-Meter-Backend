@@ -11,7 +11,7 @@ const cors = require("cors");
 const allowedOrigins = [
   "https://assign-meter-web.vercel.app",
   "http://localhost:3001",
-  "exp://192.168.29.152:8081",
+  "exp://192.168.1.6:8081",
 ];
 
 app.use(

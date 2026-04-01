@@ -133,4 +133,44 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.get("/supervisor", async (req, res) => {
+  const token = req?.headers?.authorization?.split(" ")[1];
+  // [newold, oldnew, meterid, status];
+
+  try {
+    if (!token) {
+      return res.status(401).json({
+        status: "error",
+        message: "Unauthorized",
+      });
+    }
+  const sort = req.query.sort;
+
+  const finalSort = () => {
+    if (sort === "newold") return { createdAt: -1 }; // newest first
+    if (sort === "oldnew") return { createdAt: 1 }; // oldest first
+    if (sort === "meterid") return { meterNumber: 1 };
+    if (sort === "status") return { status: 1 };
+    return { createdAt: -1 }; // default
+    };
+    const search = req.query.search || "";
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await UserDB.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({
+        status: "error",
+        message: "Unauthorized",
+      });
+    }
+    const findMeter = await MeterDB.find({ supervisor: user._id, meterNumber: { $regex: search, $options: "i" } }).sort(finalSort()).lean();
+    return res.status(200).json({
+      status: "success",
+      data: findMeter,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ status: "error", message: "Server error" });
+  }
+});
+
 module.exports = router;
