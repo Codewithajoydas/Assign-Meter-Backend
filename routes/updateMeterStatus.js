@@ -10,7 +10,7 @@ const upload = multer();
 
 router.post("/", upload.single("file"), async (req, res) => {
   try {
-    // 1. Token extraction
+    // 1. Auth check
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -22,15 +22,6 @@ router.post("/", upload.single("file"), async (req, res) => {
 
     const token = authHeader.split(" ")[1];
 
-    // 2. File check
-    if (!req.file) {
-      return res.status(400).json({
-        status: "error",
-        message: "No file uploaded",
-      });
-    }
-
-    // 3. JWT verification
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -41,7 +32,6 @@ router.post("/", upload.single("file"), async (req, res) => {
       });
     }
 
-    // 4. User check
     const user = await UserDB.findById(decoded.id);
     if (!user) {
       return res.status(401).json({
@@ -50,22 +40,30 @@ router.post("/", upload.single("file"), async (req, res) => {
       });
     }
 
-    // 5. Read Excel
-    let rawData;
-    try {
-      const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    // 2. File check
+    if (!req.file) {
+      return res.status(400).json({
+        status: "error",
+        message: "No file uploaded",
+      });
+    }
 
-      if (!workbook.SheetNames.length) {
-        return res.status(400).json({
-          status: "error",
-          message: "Excel file has no sheets",
-        });
-      }
+    // 3. Read Excel SAFELY (no number conversion)
+    let rawData;
+
+    try {
+      const workbook = XLSX.read(req.file.buffer, {
+        type: "buffer",
+        raw: true, // IMPORTANT
+      });
 
       const sheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[sheetName];
 
-      rawData = XLSX.utils.sheet_to_json(worksheet);
+      rawData = XLSX.utils.sheet_to_json(worksheet, {
+        raw: false, // force string output
+        defval: "", // avoid undefined
+      });
     } catch (err) {
       return res.status(400).json({
         status: "error",
@@ -73,7 +71,6 @@ router.post("/", upload.single("file"), async (req, res) => {
       });
     }
 
-    // 6. Empty check
     if (!rawData || rawData.length === 0) {
       return res.status(400).json({
         status: "error",
@@ -81,25 +78,48 @@ router.post("/", upload.single("file"), async (req, res) => {
       });
     }
 
-    // 7. Clean data
+    // 4. Normalize keys (handle different column names)
     const cleanedData = rawData
-      .map((item, index) => ({
-        meterNumber: String(item.meterNumber || "").trim(),
-        status: String(item.status || "")
+      .map((item, index) => {
+        const meterNumber = (
+          item.meterNumber ||
+          item["Meter Number"] ||
+          item["meterNumber"] ||
+          item["Equip Number"] ||
+          ""
+        )
+          .toString()
+          .trim();
+
+        const status = (item.status || item["Status"] || "")
+          .toString()
           .toLowerCase()
-          .trim(),
-        row: index + 1,
-      }))
-      .filter((item) => item.meterNumber && item.status);
+          .trim();
+
+        return {
+          meterNumber,
+          status,
+          row: index + 1,
+        };
+      })
+      .filter((item) => {
+        // strict validation
+        if (!item.meterNumber || !item.status) return false;
+
+        // meter must be digits only (adjust if needed)
+        if (!/^\d+$/.test(item.meterNumber)) return false;
+
+        return true;
+      });
 
     if (cleanedData.length === 0) {
       return res.status(400).json({
         status: "error",
-        message: "No valid meterNumber or status found in file",
+        message: "No valid meterNumber or status found",
       });
     }
 
-    // 8. Bulk operation
+    // 5. Bulk update
     const operations = cleanedData.map((item) => ({
       updateOne: {
         filter: { meterNumber: item.meterNumber },
@@ -117,7 +137,7 @@ router.post("/", upload.single("file"), async (req, res) => {
       });
     }
 
-    // 9. Success response
+    // 6. Response
     return res.json({
       status: "success",
       message: "Meter status updated successfully",
@@ -131,7 +151,6 @@ router.post("/", upload.single("file"), async (req, res) => {
     return res.status(500).json({
       status: "error",
       message: "Unexpected server error",
-      debug: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 });
