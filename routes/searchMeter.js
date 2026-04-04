@@ -3,11 +3,11 @@ const router = express.Router();
 const jwt = require("jsonwebtoken");
 const UserDB = require("../models/user");
 const MeterDB = require("../models/meter");
+
 router.get("/", async (req, res) => {
   const token = req?.headers?.authorization?.split(" ")[1];
   try {
     const meterNumber = req.query.meterNumber;
-      console.log(meterNumber);
     if (!meterNumber) {
       return res.status(400).json({
         status: "error",

@@ -2,21 +2,16 @@ const fs = require("fs");
 const csv = require("csv-parser");
 const mongoose = require("mongoose");
 require("dotenv").config();
-
 const meterDB = require("./models/meter");
 
-// ================= DB CONNECT =================
 mongoose.connect(process.env.MONGOOSE_URL);
-
 mongoose.connection.on("connected", () => {
   console.log("MongoDB Connected ✅");
 });
-
 mongoose.connection.on("error", (err) => {
   console.log("MongoDB Error ❌", err);
 });
 
-// ================= CONFIG =================
 const BATCH_SIZE = 1000;
 let batch = [];
 let totalInserted = 0;
@@ -60,13 +55,7 @@ const normalizeMeterType = (val) => {
   return allowed.includes(v) ? v : null;
 };
 
-// STORE LOCATION
-const normalizeLocation = (val) => {
-  const v = normalize(val).toLowerCase();
-  if (v.includes("golaghat")) return "Golaghat";
-  if (v.includes("nagaon")) return "Nagaon";
-  return null;
-};
+
 
 // PKG FIX
 const normalizePkg = (val) => {
@@ -81,6 +70,11 @@ const normalizePkg = (val) => {
 
   return v;
 };
+
+const normalizeStatus = (val)=>{
+  const v = normalize(val).toLowerCase();
+  return v
+}
 
 // ================= STREAM =================
 const stream = fs.createReadStream("./meters.csv").pipe(
@@ -98,11 +92,11 @@ stream.on("data", async (row) => {
       equipCategory: normalizeEquip(row.equipcategory),
       meterType: normalizeMeterType(row.metertype || row.type),
       installationType: row.installation || row.installationtype,
-      storeLocation: normalizeLocation(row.store || row.storelocation),
+      storeLocation: row.store || row.storelocation,
       agency: normalize(row.agency),
       installerId: normalize(row.installerid),
       pkg: normalizePkg(row.pkg) || "ASS3",
-      status:row.status
+      status:normalizeStatus(row.status),
     };
 
     // ================= VALIDATION =================

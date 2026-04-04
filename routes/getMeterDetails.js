@@ -107,7 +107,7 @@ router.get("/", async (req, res) => {
     }
 
     // ---------------- QUERY ----------------
-    const meters = await MeterDB.find(filter)
+    const meters = await MeterDB.find(filter).populate("supervisor")
       .sort({ createdAt: sort === "asc" ? 1 : -1 })
       .skip((pageNumber - 1) * limit)
       .limit(limit)
