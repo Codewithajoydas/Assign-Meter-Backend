@@ -12,187 +12,149 @@ const VALID_STATUS = ["active", "pending", "installed", "rejected"];
 
 router.post("/", upload.single("file"), async (req, res) => {
   try {
-    // =========================
-    // 1. AUTH
-    // =========================
+    // ================= AUTH =================
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        status: "error",
-        message: "Authorization header missing or invalid",
-      });
+      return res.status(401).json({ message: "Unauthorized" });
     }
 
     const token = authHeader.split(" ")[1];
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
-      return res.status(401).json({
-        status: "error",
-        message: "Invalid or expired token",
-      });
-    }
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     const user = await UserDB.findById(decoded.id);
-    if (!user) {
-      return res.status(401).json({
-        status: "error",
-        message: "User not found",
-      });
-    }
+    if (!user) return res.status(401).json({ message: "User not found" });
 
-    // =========================
-    // 2. FILE CHECK
-    // =========================
     if (!req.file) {
-      return res.status(400).json({
-        status: "error",
-        message: "No file uploaded",
-      });
+      return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // =========================
-    // 3. READ EXCEL (SAFE MODE)
-    // =========================
-    let rawData;
+    // ================= READ EXCEL =================
+    const workbook = XLSX.read(req.file.buffer, {
+      type: "buffer",
+      raw: true,
+    });
 
-    try {
-      const workbook = XLSX.read(req.file.buffer, {
-        type: "buffer",
-        raw: true,
-      });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-
-      rawData = XLSX.utils.sheet_to_json(worksheet, {
-        raw: false,
-        defval: "",
-      });
-    } catch (err) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid Excel file",
-      });
-    }
+    const rawData = XLSX.utils.sheet_to_json(worksheet, {
+      raw: false,
+      defval: "",
+    });
 
     if (!rawData.length) {
-      return res.status(400).json({
-        status: "error",
-        message: "Excel is empty",
-      });
+      return res.status(400).json({ message: "Empty file" });
     }
 
-    // =========================
-    // 4. CLEAN + VALIDATE
-    // =========================
+    // ================= VALIDATION =================
+    const errors = [];
     const validData = [];
-    const failedRows = [];
+    const seen = new Set();
 
-    rawData.forEach((item, index) => {
-      const row = index + 2; // Excel row number
+    for (let i = 0; i < rawData.length; i++) {
+      const rowNumber = i + 2;
 
       let meterNumber = (
-        item.meterNumber ||
-        item["Meter Number"] ||
-        item["Equip Number"] ||
+        rawData[i].meterNumber ||
+        rawData[i]["Meter Number"] ||
+        rawData[i]["Equip Number"] ||
         ""
       )
         .toString()
-        .replace(/\s+/g, "") // remove ALL spaces
+        .replace(/\s+/g, "")
         .trim();
 
-      let status = (item.status || item["Status"] || "")
+      let status = (rawData[i].status || rawData[i]["Status"] || "")
         .toString()
         .toLowerCase()
         .trim();
 
-      // validation
+      // -------- Empty Check --------
       if (!meterNumber || !status) {
-        failedRows.push({ row, reason: "Missing data" });
-        return;
+        errors.push({ row: rowNumber, reason: "Missing data" });
+        continue;
       }
 
+      // -------- Format Check --------
       if (!/^\d+$/.test(meterNumber)) {
-        failedRows.push({ row, meterNumber, reason: "Invalid meterNumber" });
-        return;
+        errors.push({ row: rowNumber, meterNumber, reason: "Invalid number" });
+        continue;
       }
 
+      // -------- Status Check --------
       if (!VALID_STATUS.includes(status)) {
-        failedRows.push({ row, status, reason: "Invalid status" });
-        return;
+        errors.push({ row: rowNumber, status, reason: "Invalid status" });
+        continue;
       }
 
-      validData.push({ meterNumber, status });
-    });
+      // -------- Duplicate in File --------
+      if (seen.has(meterNumber)) {
+        errors.push({
+          row: rowNumber,
+          meterNumber,
+          reason: "Duplicate in file",
+        });
+        continue;
+      }
 
-    if (!validData.length) {
-      return res.status(400).json({
-        status: "error",
-        message: "No valid data found",
-        failedRows,
-      });
+      seen.add(meterNumber);
+
+      validData.push({ meterNumber, status, row: rowNumber });
     }
 
-    // =========================
-    // 5. DEBUG MATCH CHECK
-    // =========================
-    const sample = validData[0];
-    const testMatch = await MeterDB.findOne({
-      meterNumber: sample.meterNumber,
+    // ================= DB EXISTENCE CHECK =================
+    const meterNumbers = validData.map((d) => d.meterNumber);
+
+    const existingMeters = await MeterDB.find({
+      meterNumber: { $in: meterNumbers },
+    }).select("meterNumber");
+
+    const existingSet = new Set(existingMeters.map((m) => m.meterNumber));
+
+    const finalData = [];
+
+    validData.forEach((item) => {
+      if (!existingSet.has(item.meterNumber)) {
+        errors.push({
+          row: item.row,
+          meterNumber: item.meterNumber,
+          reason: "Not found in DB",
+        });
+      } else {
+        finalData.push(item);
+      }
     });
 
-    console.log("DEBUG SAMPLE:", sample);
-    console.log("MATCH FOUND:", !!testMatch);
+    // ================= BULK UPDATE =================
+    let result = { matchedCount: 0, modifiedCount: 0 };
 
-    // =========================
-    // 6. BULK UPDATE
-    // =========================
-    const operations = validData.map((item) => ({
-      updateOne: {
-        filter: { meterNumber: item.meterNumber },
-        update: { $set: { status: item.status } },
-        upsert: false,
-      },
-    }));
+    if (finalData.length > 0) {
+      const operations = finalData.map((item) => ({
+        updateOne: {
+          filter: { meterNumber: item.meterNumber },
+          update: { $set: { status: item.status } },
+        },
+      }));
 
-    let result;
-    try {
       result = await MeterDB.bulkWrite(operations);
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({
-        status: "error",
-        message: "Database update failed",
-      });
     }
 
-    // =========================
-    // 7. RESPONSE
-    // =========================
+    // ================= RESPONSE =================
     return res.json({
-      status: "success",
-      message: "Processing completed",
+      message: "Upload processed",
 
       totalRows: rawData.length,
-      validRows: validData.length,
-      failedRowsCount: failedRows.length,
+      validRows: finalData.length,
+      errorCount: errors.length,
 
       matchedCount: result.matchedCount,
       modifiedCount: result.modifiedCount,
 
-      failedRows, // IMPORTANT for debugging
+      errors, // FULL REPORT
     });
-  } catch (error) {
-    console.error("Unexpected error:", error);
-
-    return res.status(500).json({
-      status: "error",
-      message: "Unexpected server error",
-    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error" });
   }
 });
 
