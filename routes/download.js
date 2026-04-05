@@ -2,9 +2,9 @@ const express = require("express");
 const router = express.Router();
 const meterDB = require("../models/meter");
 const jwt = require("jsonwebtoken");
-
 const ExcelJS = require("exceljs");
 
+// ---------------- UTIL ----------------
 function formatDate(date) {
   if (!date) return "";
   const d = new Date(date);
@@ -16,95 +16,170 @@ function formatDate(date) {
   return `${day}/${month}/${year}`;
 }
 
+// Escape regex (IMPORTANT)
+function escapeRegex(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// ---------------- ROUTE ----------------
 router.get("/", async (req, res) => {
   try {
-    // ===== AUTH =====
+    // ---------- TOKEN VALIDATION ----------
     const token = req?.headers?.authorization?.split(" ")[1];
-    jwt.verify(token, process.env.JWT_SECRET);
 
-    // ===== FILTERS =====
-    const { startDate, endDate, agency, store, meterType, installationType } =
-      req.query;
+    if (!token) {
+      return res.status(401).json({ message: "Token missing" });
+    }
 
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch {
+      return res.status(401).json({ message: "Invalid token" });
+    }
+
+    // ---------- QUERY PARAMS ----------
+    const {
+      startDate,
+      endDate,
+      agency,
+      store,
+      meterType,
+      installationType,
+      status,
+    } = req.query;
+    console.log(status);
     let filter = [];
 
-    if (startDate) filter.push({ createdAt: { $gte: new Date(startDate) } });
+    // ---------- DATE FILTER ----------
+    if (startDate || endDate) {
+      const dateFilter = {};
 
-    if (endDate) filter.push({ createdAt: { $lte: new Date(endDate) } });
+      if (startDate) {
+        dateFilter.$gte = new Date(startDate);
+      }
 
-    if (agency) filter.push({ agency: { $regex: new RegExp(agency, "i") } });
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.$lte = end;
+      }
 
-    if (store)
-      filter.push({ storeLocation: { $regex: new RegExp(store, "i") } });
+      filter.push({ createdAt: dateFilter });
+    }
 
-    if (meterType)
-      filter.push({ meterType: { $regex: new RegExp(meterType, "i") } });
-
-    if (installationType)
+    // ---------- SAFE REGEX FILTER ----------
+    if (agency) {
       filter.push({
-        installationType: { $regex: new RegExp(installationType, "i") },
+        agency: { $regex: escapeRegex(agency), $options: "i" },
       });
+    }
+
+    if (store) {
+      filter.push({
+        storeLocation: { $regex: escapeRegex(store), $options: "i" },
+      });
+    }
+
+    if (meterType) {
+      filter.push({
+        meterType: { $regex: escapeRegex(meterType), $options: "i" },
+      });
+    }
+
+    if (installationType) {
+      filter.push({
+        installationType: {
+          $regex: escapeRegex(installationType),
+          $options: "i",
+        },
+      });
+    }
+
+    if (status) {
+      filter.push({
+        status: { $regex: escapeRegex(status), $options: "i" },
+      });
+    }
 
     const queries = filter.length ? { $and: filter } : {};
 
-    const meters = await meterDB.find({ ...queries, status: "pending" }).lean();
+    // ---------- FETCH DATA ----------
+    const meters = await meterDB.find(queries).limit(10000).lean();
+
+    // ---------- EXCEL ----------
     const workbook = new ExcelJS.Workbook();
+
     const sheet1 = workbook.addWorksheet("Store Data");
+    const sheet2 = workbook.addWorksheet("Agency Data");
+    const sheet3 = workbook.addWorksheet("Dispatch Data");
+
+    // ---------- COLUMNS ----------
     sheet1.columns = [
-      { header: "Equip Category", key: "meterType", width: 20 },
+      { header: "Equip Category", key: "equipCategory", width: 20 },
       { header: "Equip Number", key: "meterNumber", width: 20 },
-      { header: "Material Type", key: "materialType", width: 20 },
+      { header: "Material Type", key: "meterType", width: 20 },
       { header: "Store Name", key: "storeLocation", width: 25 },
       { header: "Asset Received Date", key: "createdAt", width: 25 },
     ];
-    meters.forEach((m) => {
-      sheet1.addRow({
-        meterType: m.equipCategory,
-        meterNumber: m.meterNumber,
-        materialType: m.meterType,
-        storeLocation: m.storeLocation,
-        createdAt: formatDate(m.createdAt - 24 * 60 * 60 * 1000 * 10),
-      });
-    });
-
-    const sheet2 = workbook.addWorksheet("Agency Data");
 
     sheet2.columns = [
-      { header: "Equipment Category", key: "meterType", width: 20 },
+      { header: "Equipment Category", key: "equipCategory", width: 20 },
       { header: "Equipment Number", key: "meterNumber", width: 20 },
       { header: "Agency Name", key: "agency", width: 25 },
       { header: "Agency Issue Date", key: "agencyDate", width: 25 },
     ];
 
-    meters.forEach((m) => {
-      sheet2.addRow({
-        meterType: m.equipCategory,
-        meterNumber: m.meterNumber,
-        agency: m.agency,
-        agencyDate: formatDate(m.createdAt - 24 * 60 * 60 * 1000 * 10),
-      });
-    });
-
-    const sheet3 = workbook.addWorksheet("Dispatch Data");
-
     sheet3.columns = [
-      { header: "Equipment Category", key: "meterType", width: 20 },
+      { header: "Equipment Category", key: "equipCategory", width: 20 },
       { header: "Equipment Number", key: "meterNumber", width: 20 },
-      { header: "Field Engineer", key: "fieldEngineer", width: 25 },
+      { header: "Field Engineer", key: "installerId", width: 25 },
       { header: "Installation Type", key: "installationType", width: 25 },
       { header: "Dispatch Date", key: "dispatchDate", width: 25 },
     ];
 
+    // ---------- SINGLE LOOP (OPTIMIZED) ----------
     meters.forEach((m) => {
-      sheet3.addRow({
-        meterType: m.equipCategory,
+      // Correct date handling
+      const created = new Date(m.createdAt);
+
+      const storeDate = new Date(created);
+      storeDate.setDate(storeDate.getDate() - 10);
+
+      const agencyDate = new Date(created);
+      agencyDate.setDate(agencyDate.getDate() - 10);
+
+      const dispatchDate = new Date(created);
+      dispatchDate.setDate(dispatchDate.getDate() - 2);
+
+      // Sheet 1
+      sheet1.addRow({
+        equipCategory: m.equipCategory,
         meterNumber: m.meterNumber,
-        fieldEngineer: m.installerId,
+        meterType: m.meterType,
+        storeLocation: m.storeLocation,
+        createdAt: formatDate(storeDate),
+      });
+
+      // Sheet 2
+      sheet2.addRow({
+        equipCategory: m.equipCategory,
+        meterNumber: m.meterNumber,
+        agency: m.agency,
+        agencyDate: formatDate(agencyDate),
+      });
+
+      // Sheet 3
+      sheet3.addRow({
+        equipCategory: m.equipCategory,
+        meterNumber: m.meterNumber,
+        installerId: m.installerId,
         installationType: m.installationType,
-        dispatchDate: formatDate(m.createdAt - 24 * 60 * 60 * 1000 * 2),
+        dispatchDate: formatDate(dispatchDate),
       });
     });
 
+    // ---------- RESPONSE ----------
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -118,7 +193,7 @@ router.get("/", async (req, res) => {
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
-    console.error(err);
+    console.error("EXCEL ERROR:", err);
     res.status(500).json({ message: "Error generating Excel" });
   }
 });

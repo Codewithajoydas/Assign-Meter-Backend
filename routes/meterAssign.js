@@ -52,7 +52,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const metersData = meterNumber.map((meter) => ({
+    const metersData = meterNumber.filter((meter)=>meter.trim() !== "").map((meter) => ({
       meterNumber: meter,
       equipCategory,
       meterType,

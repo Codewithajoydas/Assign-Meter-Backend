@@ -5,6 +5,10 @@ const UserDB = require("../models/user");
 const jwt = require("jsonwebtoken");
 
 router.get("/", async (req, res) => {
+  await MeterDB.updateMany(
+    { supervisor: { $exists: false } },
+    { $set: { supervisor: null } },
+  );
   try {
     // ---------------- QUERY PARAMS ----------------
     const status =
@@ -112,7 +116,6 @@ router.get("/", async (req, res) => {
       .skip((pageNumber - 1) * limit)
       .limit(limit)
       .lean();
-
     const totalData = await MeterDB.countDocuments(filter);
 
     return res.status(200).json({
