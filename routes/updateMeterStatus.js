@@ -36,6 +36,7 @@ router.post("/", upload.single("file"), async (req, res) => {
 
     const errors = [];
     for (let row of data) {
+      console.log(row);
       const meterNumber = (row.meterNumber || "")
         .toString()
         .replace(/[\r\n\t]/g, "")
