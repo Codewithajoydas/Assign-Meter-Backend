@@ -157,6 +157,20 @@ router.get("/supervisor", async (req, res) => {
     return { createdAt: -1 }; // default
     };
     const search = req.query.search || "";
+    const status = req.query.status || null;
+    const agency = req.query.agency || null;
+    const store = req.query.store || null;
+    const meterType = req.query.meterType || null;
+    const installationType = req.query.installationType || null;
+
+    const filter = {};
+
+    if (status) filter.status = status;
+    if (store) filter.storeLocation = store;
+    if (agency) filter.agency = agency;
+    if (meterType) filter.meterType = meterType;
+    if (installationType) filter.installationType = installationType;
+    console.log(filter);
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await UserDB.findById(decoded.id);
     if (!user) {
@@ -165,7 +179,7 @@ router.get("/supervisor", async (req, res) => {
         message: "Unauthorized",
       });
     }
-    const findMeter = await MeterDB.find({ supervisor: user._id, meterNumber: { $regex: search, $options: "i" } }).sort(finalSort()).lean();
+    const findMeter = await MeterDB.find({...filter, supervisor: user._id, meterNumber: { $regex: search, $options: "i" } }).sort(finalSort()).lean();
     return res.status(200).json({
       status: "success",
       data: findMeter,
