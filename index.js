@@ -43,6 +43,7 @@ app.use("/api/download", require("./routes/download"));
 app.use("/api/searchmeter", require("./routes/searchMeter"));
 app.use("/api/createuser", require("./routes/createUser"));
 app.use("/api/statusupdate", require("./routes/updateMeterStatus"));
+app.use("/api/wrongmeter", require("./routes/wrongmeternumber"));
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log("server is running on port", port);

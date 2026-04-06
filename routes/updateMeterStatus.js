@@ -23,7 +23,7 @@ router.post("/", upload.single("file"), async (req, res) => {
       type: "buffer",
       raw: true,
     });
-    
+
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(sheet, {
       raw: true,
@@ -42,7 +42,9 @@ router.post("/", upload.single("file"), async (req, res) => {
         .replace(/[\r\n\t]/g, "")
         .replace(/\s+/g, "")
         .trim();
-      const findMeter = await MeterDB.findOne({ meterNumber });
+      const findMeter = await MeterDB.findOne({
+        meterNumber: { $regex: `^${meterNumber.trim()}$`, $options: "i" },
+      });
       if (!findMeter) {
         errors.push({ meterNumber, message: "Meter not found" });
         continue;
