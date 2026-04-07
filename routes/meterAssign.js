@@ -9,7 +9,6 @@ const jwt = require("jsonwebtoken");
 // ================= HELPERS =================
 const cleanMeterNumber = (val) => {
   if (!val) return null;
-
   return String(val)
     .replace(/[\r\n\t]/g, "") // remove newline, tabs
     .replace(/\s+/g, "") // remove ALL spaces
@@ -123,6 +122,15 @@ router.post("/", async (req, res) => {
     }
 
     // ================= BUILD DATA =================
+    uniqueMeters.map((m) => {
+      if (m.length > 8) {
+        return res.status(400).json({
+          status: "error",
+          message: `Invalid meter number: ${m}`,
+        });
+      }
+    })
+
     const metersData = uniqueMeters.map((meter) => ({
       meterNumber: meter,
       equipCategory,
