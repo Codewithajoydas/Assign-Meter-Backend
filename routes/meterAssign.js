@@ -10,19 +10,17 @@ const jwt = require("jsonwebtoken");
 const cleanMeterNumber = (val) => {
   if (!val) return null;
   return String(val)
-    .replace(/[\r\n\t]/g, "") // remove newline, tabs
-    .replace(/\s+/g, "") // remove ALL spaces
+    .replace(/[\r\n\t]/g, "") 
+    .replace(/\s+/g, "")
     .trim();
 };
 
 const isValidMeterNumber = (val) => {
-  return /^[0-9]+$/.test(val); // change if needed
+  return /^[0-9]{7}$/.test(val); 
 };
 
-// ================= ROUTE =================
 router.post("/", async (req, res) => {
   try {
-    // ================= AUTH =================
     const token = req?.headers?.authorization?.split(" ")[1];
 
     if (!token) {
@@ -84,8 +82,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ================= CLEAN =================
-    const cleanedMeters = meterNumber.map(cleanMeterNumber).filter((m) => m); // remove empty/null
+    const cleanedMeters = meterNumber.map(cleanMeterNumber).filter((m) => m);
 
     if (cleanedMeters.length === 0) {
       return res.status(400).json({
@@ -94,7 +91,6 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ================= VALIDATE =================
     const invalidMeters = cleanedMeters.filter((m) => !isValidMeterNumber(m));
 
     if (invalidMeters.length > 0) {
@@ -104,12 +100,11 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ================= REMOVE DUPLICATES IN REQUEST =================
     const uniqueMeters = [...new Set(cleanedMeters)];
 
-    // ================= CHECK DB DUPLICATES =================
     const existing = await MeterDB.find({
       meterNumber: { $in: uniqueMeters },
+      installerId
     }).select("meterNumber");
 
     if (existing.length > 0) {
@@ -121,7 +116,6 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ================= BUILD DATA =================
     uniqueMeters.map((m) => {
       if (m.length > 8) {
         return res.status(400).json({
