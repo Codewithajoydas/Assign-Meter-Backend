@@ -3,7 +3,7 @@ const router = express.Router();
 const meterDB = require("../models/meter");
 const jwt = require("jsonwebtoken");
 const ExcelJS = require("exceljs");
-
+const userDB = require("../models/user");
 // ---------------- UTIL ----------------
 function formatDate(date) {
   if (!date) return "";
@@ -192,6 +192,78 @@ router.get("/", async (req, res) => {
 
     await workbook.xlsx.write(res);
     res.end();
+  } catch (err) {
+    console.error("EXCEL ERROR:", err);
+    res.status(500).json({ message: "Error generating Excel" });
+  }
+});
+
+
+router.get("/whole", async (req, res) => {
+  const token = req?.headers?.authorization?.split(" ")[1];
+  if(!token) return res.status(401).json({
+    status: "error",
+    message: "Unauthorized",
+  })
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const user = await userDB.findById(decoded.id);
+  if(!user) return res.status(401).json({
+    status: "error",
+    message: "Unauthorized",
+  })
+  
+  try {
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=meters-assignment-report.xlsx",
+    );
+
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream: res,
+    });
+
+    const sheet = workbook.addWorksheet("Meters");
+
+    sheet.columns = [
+      { header: "Equip Category", key: "equipCategory", width: 20 },
+      { header: "Equip Number", key: "meterNumber", width: 20 },
+      { header: "Material Type", key: "meterType", width: 20 },
+      { header: "Store Name", key: "storeLocation", width: 25 },
+      { header: "Asset Received Date", key: "createdAt", width: 25 },
+      { header: "Agency Name", key: "agency", width: 25 },
+      { header: "Field Engineer", key: "installerId", width: 25 },
+      { header: "Installation Type", key: "installationType", width: 25 },
+      { header: "Supervisor Name", key: "supervisor", width: 25 },
+      { header: "Dispatch Date", key: "dispatchDate", width: 25 },
+      { header: "Status", key: "status", width: 25 },
+    ];
+
+    const cursor = meterDB.find().populate("supervisor").lean().cursor();
+
+    for await (const meter of cursor) {
+      sheet
+        .addRow({
+          equipCategory: meter.equipCategory,
+          meterNumber: meter.meterNumber,
+          meterType: meter.meterType,
+          storeLocation: meter.storeLocation,
+          createdAt: meter.createdAt,
+          agency: meter.agency,
+          installerId: meter.installerId,
+          installationType: meter.installationType,
+          supervisor: meter.supervisor?.name || "No Data",
+          dispatchDate: meter.dispatchDate,
+          status: meter.status,
+        })
+        .commit();
+    }
+
+    await sheet.commit();
+    await workbook.commit(); 
   } catch (err) {
     console.error("EXCEL ERROR:", err);
     res.status(500).json({ message: "Error generating Excel" });
