@@ -5,7 +5,6 @@ const MeterSchema = new mongoose.Schema(
     meterNumber: {
       type: String,
       required: true,
-      unique: true,
     },
     pkg: {
       type:String,
