@@ -20,7 +20,6 @@ const isValidMeterNumber = (val) => {
 };
 
 router.post("/", async (req, res) => {
-  await MeterDB.collection.dropIndex("meterNumber_1");
   try {
     const token = req?.headers?.authorization?.split(" ")[1];
 
