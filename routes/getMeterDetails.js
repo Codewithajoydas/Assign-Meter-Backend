@@ -5,10 +5,6 @@ const UserDB = require("../models/user");
 const jwt = require("jsonwebtoken");
 
 router.get("/", async (req, res) => {
-  await MeterDB.updateMany(
-    { supervisor: { $exists: false } },
-    { $set: { supervisor: null } },
-  );
   try {
     // ---------------- QUERY PARAMS ----------------
     const status =
