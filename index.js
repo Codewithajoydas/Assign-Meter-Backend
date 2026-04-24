@@ -10,6 +10,7 @@ connectToMongo();
 const cors = require("cors");
 const allowedOrigins = [
   "https://assign-meter-web.vercel.app",
+  "http://localhost:3000"
 ];
 
 app.use(
