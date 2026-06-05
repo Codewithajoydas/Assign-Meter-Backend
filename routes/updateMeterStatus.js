@@ -50,8 +50,9 @@ router.post("/", upload.single("file"), async (req, res) => {
       const installerId = (row.installerId || "")
         .toString()
         .replace(/[\r\n\t]/g, "")
+      const remarks = (row.remarks || "")
 
-      return { meterNumber, status, installerId };
+      return { meterNumber, status, installerId, remarks };
     });
 
     // ================= UNIQUE METER NUMBERS =================
@@ -75,9 +76,9 @@ router.post("/", upload.single("file"), async (req, res) => {
 
     // ================= BUILD BULK OPERATIONS =================
     for (let row of cleanedData) {
-      const { meterNumber, status, installerId } = row;
+      const { meterNumber, status, installerId, remarks } = row;
 
-      if (!meterNumber || !status || !installerId) continue;
+      if (!meterNumber || !status || !installerId||!remarks) continue;
 
       if (!meterMap.has(meterNumber)) {
         errors.push({ meterNumber, message: "Meter not found" });
@@ -87,7 +88,7 @@ router.post("/", upload.single("file"), async (req, res) => {
       operations.push({
         updateOne: {
           filter: { meterNumber, installerId },
-          update: { $set: { status } },
+          update: { $set: { status, remarks } },
         },
       });
     }

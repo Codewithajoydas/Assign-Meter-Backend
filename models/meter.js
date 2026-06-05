@@ -64,6 +64,10 @@ const MeterSchema = new mongoose.Schema(
       enum: ["active", "pending", "installed", "rejected"],
       default: "pending",
     },
+    remarks: {
+      type: String,
+      default: "",
+    }
   },
   { timestamps: true },
 );
