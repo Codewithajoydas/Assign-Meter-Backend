@@ -37,6 +37,10 @@ const userSchema = new mongoose.Schema(
         "ASS10",
       ],
     },
+    expoNotificationToken:{
+      type: String,
+      default:null
+    }
   },
   {
     timestamps: true,

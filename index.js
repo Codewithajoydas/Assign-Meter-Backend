@@ -44,6 +44,7 @@ app.use("/api/createuser", require("./routes/createUser"));
 app.use("/api/statusupdate", require("./routes/updateMeterStatus"));
 app.use("/api/wrongmeter", require("./routes/wrongmeternumber"));
 app.use("/api/assign-location", require("./routes/meterLocation"));
+app.use("/api/notification", require("./routes/notification"));
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log("server is running on port", port);
