@@ -3,8 +3,8 @@ const app = express();
 require("dotenv").config();
 const connectToMongo = require("./config/mongoose");
 const cookieParser = require("cookie-parser");
-app.use(cookieParser()); 
- 
+app.use(cookieParser());
+
 
 connectToMongo();
 const cors = require("cors");
@@ -45,6 +45,8 @@ app.use("/api/statusupdate", require("./routes/updateMeterStatus"));
 app.use("/api/wrongmeter", require("./routes/wrongmeternumber"));
 app.use("/api/assign-location", require("./routes/meterLocation"));
 app.use("/api/notification", require("./routes/notification"));
+app.use("/events", require("./routes/addSee"));
+app.use('/api/bledevices', require('./routes/bleDevices'));
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log("server is running on port", port);

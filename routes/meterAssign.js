@@ -6,17 +6,19 @@ const MeterDB = require("../models/meter");
 const UserDB = require("../models/user");
 const jwt = require("jsonwebtoken");
 
+const {addClient, broadcast} = require("../config/sse.config")
+
 // ================= HELPERS =================
 const cleanMeterNumber = (val) => {
   if (!val) return null;
   return String(val)
-    .replace(/[\r\n\t]/g, "") 
+    .replace(/[\r\n\t]/g, "")
     .replace(/\s+/g, "")
     .trim();
 };
 
 const isValidMeterNumber = (val) => {
-  return /^[0-9]{7}$/.test(val); 
+  return /^[0-9]{7}$/.test(val);
 };
 
 router.post("/", async (req, res) => {
@@ -31,6 +33,7 @@ router.post("/", async (req, res) => {
     }
 
     let decoded;
+
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET);
     } catch (err) {
@@ -49,7 +52,6 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ================= BODY =================
     const {
       meterNumber,
       equipCategory,
@@ -82,7 +84,9 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const cleanedMeters = meterNumber.map(cleanMeterNumber).filter((m) => m);
+    const cleanedMeters = meterNumber
+      .map(cleanMeterNumber)
+      .filter(Boolean);
 
     if (cleanedMeters.length === 0) {
       return res.status(400).json({
@@ -91,7 +95,9 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const invalidMeters = cleanedMeters.filter((m) => !isValidMeterNumber(m));
+    const invalidMeters = cleanedMeters.filter(
+      (m) => !isValidMeterNumber(m)
+    );
 
     if (invalidMeters.length > 0) {
       return res.status(400).json({
@@ -104,7 +110,7 @@ router.post("/", async (req, res) => {
 
     const existing = await MeterDB.find({
       meterNumber: { $in: uniqueMeters },
-      installerId
+      installerId,
     }).select("meterNumber");
 
     if (existing.length > 0) {
@@ -115,15 +121,6 @@ router.post("/", async (req, res) => {
           .join(", ")}`,
       });
     }
-
-    uniqueMeters.map((m) => {
-      if (m.length > 8) {
-        return res.status(400).json({
-          status: "error",
-          message: `Invalid meter number: ${m}`,
-        });
-      }
-    })
 
     const metersData = uniqueMeters.map((meter) => ({
       meterNumber: meter,
@@ -142,6 +139,20 @@ router.post("/", async (req, res) => {
       ordered: false,
     });
 
+
+    // ================= SEND LIVE UPDATE =================
+    broadcast("meter-added", {
+      insertedCount: inserted.length,
+      meters: inserted.map((meter) => ({
+        ...meter.toObject(),
+        supervisor: {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          pkg: user.pkg,
+        },
+      })),
+    });
     // ================= RESPONSE =================
     return res.status(200).json({
       status: "success",
