@@ -8,6 +8,9 @@ const jwt = require("jsonwebtoken");
 
 const {addClient, broadcast} = require("../config/sse.config")
 
+
+
+
 // ================= HELPERS =================
 const cleanMeterNumber = (val) => {
   if (!val) return null;
@@ -17,10 +20,15 @@ const cleanMeterNumber = (val) => {
     .trim();
 };
 
+
+
+
+
 const isValidMeterNumber = (val) => {
   return /^[0-9]{7}$/.test(val);
 };
 
+// 
 router.post("/", async (req, res) => {
   try {
     const token = req?.headers?.authorization?.split(" ")[1];
@@ -110,7 +118,8 @@ router.post("/", async (req, res) => {
 
     const existing = await MeterDB.find({
       meterNumber: { $in: uniqueMeters },
-      installerId,
+      agency,
+      installerId
     }).select("meterNumber");
 
     if (existing.length > 0) {
@@ -156,7 +165,7 @@ router.post("/", async (req, res) => {
     // ================= RESPONSE =================
     return res.status(200).json({
       status: "success",
-      message: "Meters assigned successfully",
+      message: "Meters sent to MIS successfully, Kindly wait for approval.",
       insertedCount: inserted.length,
       data: inserted,
     });

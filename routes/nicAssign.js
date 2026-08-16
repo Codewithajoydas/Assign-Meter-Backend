@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const NICDB = require("../models/nic");
+const NICDB = require("../models/nicDevice");
 const UserDB = require("../models/user");
 const jwt = require("jsonwebtoken");
 

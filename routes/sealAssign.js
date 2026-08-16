@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const sealDB = require("../models/seal");
+const sealDB = require("../models/meterSeal");
 const UserDB = require("../models/user");
 const jwt = require("jsonwebtoken");
 

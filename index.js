@@ -42,10 +42,10 @@ app.use("/api/download", require("./routes/download"));
 app.use("/api/searchmeter", require("./routes/searchMeter"));
 app.use("/api/createuser", require("./routes/createUser"));
 app.use("/api/statusupdate", require("./routes/updateMeterStatus"));
-app.use("/api/wrongmeter", require("./routes/wrongmeternumber"));
+app.use("/api/wrongmeter", require("./routes/getInvalidMeters"));
 app.use("/api/assign-location", require("./routes/meterLocation"));
 app.use("/api/notification", require("./routes/notification"));
-app.use("/events", require("./routes/addSee"));
+app.use("/events", require("./routes/sse"));
 app.use('/api/bledevices', require('./routes/bleDevices'));
 const port = process.env.PORT;
 app.listen(port, () => {

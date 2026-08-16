@@ -5,6 +5,7 @@ const UserDB = require("../models/user");
 const MeterDB = require("../models/meter");
 const XLSX = require("xlsx");
 const multer = require("multer");
+const { sendEmail } = require("../utils/send-mail");
 
 const upload = multer();
 
@@ -47,10 +48,13 @@ router.post("/", upload.single("file"), async (req, res) => {
         .trim();
 
       const status = (row.status || "").toString().toLowerCase().trim();
+
       const installerId = (row.installerId || "")
         .toString()
         .replace(/[\r\n\t]/g, "")
-      const remarks = (row.remarks || "")
+        .trim();
+
+      const remarks = (row.remarks || "").toString().trim();
 
       return { meterNumber, status, installerId, remarks };
     });
@@ -63,12 +67,24 @@ router.post("/", upload.single("file"), async (req, res) => {
     // ================= SINGLE DB CALL =================
     const meters = await MeterDB.find({
       meterNumber: { $in: meterNumbers },
-    }).lean();
+    })
+      .populate("supervisor")
+      .lean();
 
     // ================= CREATE LOOKUP MAP =================
     const meterMap = new Map();
+    const supervisorMap = new Map(); // email -> { name, meterNumbers: [] }
+
     meters.forEach((m) => {
       meterMap.set(m.meterNumber, true);
+      if (m.supervisor?.email) {
+        const existing = supervisorMap.get(m.supervisor.email) || {
+          name: m.supervisor.name || "Supervisor",
+          meterNumbers: [],
+        };
+        existing.meterNumbers.push(m.meterNumber);
+        supervisorMap.set(m.supervisor.email, existing);
+      }
     });
 
     const operations = [];
@@ -78,7 +94,7 @@ router.post("/", upload.single("file"), async (req, res) => {
     for (let row of cleanedData) {
       const { meterNumber, status, installerId, remarks } = row;
 
-      if (!meterNumber || !status || !installerId||!remarks) continue;
+      if (!meterNumber || !status || !installerId || !remarks) continue;
 
       if (!meterMap.has(meterNumber)) {
         errors.push({ meterNumber, message: "Meter not found" });
@@ -100,12 +116,40 @@ router.post("/", upload.single("file"), async (req, res) => {
     // ================= BULK WRITE =================
     const result = await MeterDB.bulkWrite(operations);
 
+    // ================= EMAIL SUPERVISORS =================
+    const emailResults = await Promise.all(
+      Array.from(supervisorMap.entries()).map(async ([email, info]) => {
+        const rows = info.meterNumbers
+          .map((mn) => `<li>${mn}</li>`)
+          .join("");
+
+        const outcome = await sendEmail({
+          to: email,
+          subject: "Meter Status Update",
+          text: `Hi ${info.name}, the following meters under your supervision were updated: ${info.meterNumbers.join(
+            ", "
+          )}. Total updated: ${info.meterNumbers.length}.`,
+          html: `
+            <p>Hi ${info.name},</p>
+            <p>The following meters under your supervision were updated:</p>
+            <ul>${rows}</ul>
+            <p><strong>Total updated:</strong> ${info.meterNumbers.length}</p>
+          `,
+        });
+
+        return { email, ...outcome };
+      })
+    );
+
+    const emailErrors = emailResults.filter((r) => !r.success);
+
     return res.json({
       message: "Updated successfully",
       total: operations.length,
       matched: result.matchedCount,
       modified: result.modifiedCount,
-      errors, // optional
+      errors,
+      emailErrors, // remove this key if you don't want to expose send failures to the client
     });
   } catch (err) {
     console.error(err);
