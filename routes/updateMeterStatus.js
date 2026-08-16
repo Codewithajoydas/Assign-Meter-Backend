@@ -7,158 +7,417 @@ const XLSX = require("xlsx");
 const multer = require("multer");
 const { sendEmail } = require("../utils/send-mail");
 
-const upload = multer();
-
-router.post("/", upload.single("file"), async (req, res) => {
-  try {
-    // ================= AUTH =================
-    const token = req.headers.authorization?.split(" ")[1];
-    if (!token) return res.status(401).json({ message: "Unauthorized" });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-    // Only need to confirm the user exists — fetch minimal fields
-    const userExists = await UserDB.exists({ _id: decoded.id });
-    if (!userExists) return res.status(401).json({ message: "User not found" });
-
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-
-    // ================= READ EXCEL =================
-    const workbook = XLSX.read(req.file.buffer, {
-      type: "buffer",
-      raw: true,
-    });
-
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(sheet, {
-      raw: true,
-      defval: "",
-    });
-
-    if (!data.length) {
-      return res.status(400).json({ message: "Empty file" });
-    }
-
-    // ================= CLEAN DATA (single pass) =================
-    const cleanedData = new Array(data.length);
-    const meterNumberSet = new Set();
-
-    for (let i = 0; i < data.length; i++) {
-      const row = data[i];
-
-      const meterNumber = (row.meterNumber || "")
-        .toString()
-        .replace(/[\r\n\t\s]/g, "");
-
-      const status = (row.status || "").toString().toLowerCase().trim();
-      const installerId = (row.installerId || "").toString().replace(/[\r\n\t]/g, "").trim();
-      const remarks = (row.remarks || "").toString().trim();
-
-      cleanedData[i] = { meterNumber, status, installerId, remarks };
-      if (meterNumber) meterNumberSet.add(meterNumber);
-    }
-
-    const meterNumbers = [...meterNumberSet];
-
-    // ================= SINGLE DB CALL (projected, no full docs) =================
-    // Only pull the fields we actually use — cuts payload size and populate cost.
-    const meters = await MeterDB.find(
-      { meterNumber: { $in: meterNumbers } },
-      { meterNumber: 1, supervisor: 1 }
-    )
-      .populate("supervisor", "name email") // only fetch name/email, not full user doc
-      .lean();
-
-    // ================= LOOKUP MAPS =================
-    const meterSet = new Set();
-    const supervisorMap = new Map(); // email -> { name, meterNumbers: [] }
-
-    for (const m of meters) {
-      meterSet.add(m.meterNumber);
-      if (m.supervisor?.email) {
-        let entry = supervisorMap.get(m.supervisor.email);
-        if (!entry) {
-          entry = { name: m.supervisor.name || "Supervisor", meterNumbers: [] };
-          supervisorMap.set(m.supervisor.email, entry);
-        }
-        entry.meterNumbers.push(m.meterNumber);
-      }
-    }
-
-    // ================= BUILD BULK OPERATIONS =================
-    const operations = [];
-    const errors = [];
-
-    for (const row of cleanedData) {
-      const { meterNumber, status, installerId, remarks } = row;
-      if (!meterNumber || !status || !installerId || !remarks) continue;
-
-      if (!meterSet.has(meterNumber)) {
-        errors.push({ meterNumber, message: "Meter not found" });
-        continue;
-      }
-
-      operations.push({
-        updateOne: {
-          filter: { meterNumber, installerId },
-          update: { $set: { status, remarks } },
-        },
-      });
-    }
-
-    if (!operations.length) {
-      return res.status(400).json({ message: "No valid data found", errors });
-    }
-
-    // ================= BULK WRITE (unordered = faster, keeps going past bad rows) =================
-    const result = await MeterDB.bulkWrite(operations, { ordered: false });
-
-    // ================= RESPOND IMMEDIATELY =================
-    // Don't make the client wait on outbound emails — that's pure latency with
-    // no bearing on whether the update itself succeeded.
-    res.json({
-      message: "Updated successfully",
-      total: operations.length,
-      matched: result.matchedCount,
-      modified: result.modifiedCount,
-      errors,
-    });
-
-    // ================= FIRE-AND-FORGET SUPERVISOR EMAILS =================
-    // Runs after the response is sent. Failures are logged, not surfaced to the client.
-    Promise.allSettled(
-      Array.from(supervisorMap.entries()).map(([email, info]) => {
-        const rows = info.meterNumbers.map((mn) => `<li>${mn}</li>`).join("");
-        return sendEmail({
-          to: email,
-          subject: "Meter Status Update",
-          text: `Hi ${info.name}, the following meters under your supervision were updated: ${info.meterNumbers.join(
-            ", "
-          )}. Total updated: ${info.meterNumbers.length}.`,
-          html: `
-            <p>Hi ${info.name},</p>
-            <p>The following meters under your supervision were updated:</p>
-            <ul>${rows}</ul>
-            <p><strong>Total updated:</strong> ${info.meterNumbers.length}</p>
-          `,
-        });
-      })
-    ).then((results) => {
-      const failed = results.filter(
-        (r) => r.status === "rejected" || r.value?.success === false
-      );
-      if (failed.length) {
-        console.error(`${failed.length} supervisor email(s) failed to send`);
-      }
-    });
-  } catch (err) {
-    console.error(err);
-    if (!res.headersSent) {
-      return res.status(500).json({ message: "Server error" });
-    }
-  }
+// Cap upload size (5MB) and restrict to one file — prevents memory-exhaustion DoS
+// from unbounded multer() defaults.
+const upload = multer({
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
 });
+
+// Canonical field names used everywhere downstream. Keys are lowercased
+// versions of the header text we accept in the sheet.
+const REQUIRED_HEADERS = {
+  "equipment number": "Equipment Number",
+  "field engineer": "Field Engineer",
+  status: "Status",
+  remarks: "Remarks",
+};
+
+// The DB schema only allows these exact (lowercase) values:
+//   enum: ["active", "pending", "installed", "rejected"]
+// Field engineers upload free-text status values in the sheet (SUCCESS,
+// FAILED, Success, failed, etc.), so every incoming value has to be mapped
+// to one of the four canonical values below — anything that doesn't map
+// gets excluded from the bulk write and reported back to the client instead
+// of being silently written (or silently failing) against the DB.
+//
+// Adjust this map to match your actual business meaning of SUCCESS/FAILED.
+// I've guessed SUCCESS -> "installed" and FAILED -> "rejected" — change if
+// that's not what those states mean in your workflow.
+const ALLOWED_STATUSES = ["active", "pending", "installed", "rejected"];
+const STATUS_ALIASES = {
+  success: "active",
+  successful: "active",
+  installed: "installed",
+  approved: "active",
+
+  failed: "rejected",
+  failure: "rejected",
+  rejected: "rejected",
+  reject: "rejected",
+
+  pending: "pending",
+  active: "active",
+};
+
+function normalizeStatus(raw) {
+  const key = String(raw ?? "").trim().toLowerCase();
+  const mapped = STATUS_ALIASES[key];
+  return ALLOWED_STATUSES.includes(mapped) ? mapped : null;
+}
+
+router.post("/", (req, res) => {
+  upload.single("file")(req, res, async (multerErr) => {
+    if (multerErr) {
+      console.error("[meter-status] Multer upload error:", multerErr.message);
+      const msg =
+        multerErr.code === "LIMIT_FILE_SIZE"
+          ? "File too large (max 5MB)"
+          : "File upload failed";
+      return res.status(400).json({ error: msg });
+    }
+
+    try {
+      // ---------- Auth ----------
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.startsWith("Bearer ")
+        ? authHeader.split(" ")[1]
+        : null;
+
+      if (!token) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      let decoded;
+      try {
+        decoded = jwt.verify(token, process.env.JWT_SECRET);
+      } catch (jwtErr) {
+        console.error("[meter-status] JWT verify failed:", jwtErr.message);
+        return res.status(401).json({ error: "Invalid or expired token" });
+      }
+
+      // Confirm the caller actually exists / is authorized to bulk-update.
+      // Adjust the role check to whatever your schema uses (e.g. role: "admin").
+      const requester = await UserDB.findById(decoded.id).lean();
+      if (!requester) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // ---------- File presence ----------
+      const file = req.file;
+      if (!file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      // ---------- Parse workbook ----------
+      let workbook;
+      try {
+        workbook = XLSX.read(file.buffer, { type: "buffer" });
+      } catch (parseErr) {
+        console.error("[meter-status] XLSX parse failed:", parseErr.message);
+        return res.status(400).json({ error: "Could not read file. Is it a valid .xlsx/.csv?" });
+      }
+
+      const sheetName = workbook.SheetNames[0];
+      if (!sheetName) {
+        return res.status(400).json({ error: "Workbook has no sheets" });
+      }
+      const sheet = workbook.Sheets[sheetName];
+
+      const headerRow = XLSX.utils.sheet_to_json(sheet, { header: 1 })[0];
+      if (!headerRow || headerRow.length === 0) {
+        return res.status(400).json({ error: "No header row found in sheet" });
+      }
+
+      // Build a map from the *actual* header text in the file -> canonical name,
+      // matched case-insensitively/trimmed. This is what was missing before:
+      // the presence check was case-insensitive but the row data was still
+      // pulled using hardcoded canonical keys, so mismatched casing silently
+      // produced empty rows.
+      const actualToCanonical = {};
+      headerRow.forEach((h) => {
+        const norm = String(h ?? "").trim().toLowerCase();
+        if (REQUIRED_HEADERS[norm]) {
+          actualToCanonical[String(h).trim()] = REQUIRED_HEADERS[norm];
+        }
+      });
+
+      const foundCanonical = new Set(Object.values(actualToCanonical));
+      const missingHeaders = Object.values(REQUIRED_HEADERS).filter(
+        (canonical) => !foundCanonical.has(canonical),
+      );
+
+      if (missingHeaders.length > 0) {
+        return res
+          .status(400)
+          .json({ error: `Missing headers: ${missingHeaders.join(", ")}` });
+      }
+
+      // Re-key every row from whatever casing was in the file to canonical names.
+      const rawRows = XLSX.utils.sheet_to_json(sheet);
+      const data = rawRows.map((row) => {
+        const canonicalRow = {};
+        for (const [actualKey, value] of Object.entries(row)) {
+          const canonicalKey = actualToCanonical[actualKey.trim()];
+          if (canonicalKey) canonicalRow[canonicalKey] = value;
+        }
+        return canonicalRow;
+      });
+
+      // ---------- Dedup + status normalization ----------
+      const getUniqueEntries = (rows) => {
+        const uniqueEntries = [];
+        const invalidStatusRows = [];
+        const seen = new Set();
+        let skippedIncomplete = 0;
+
+        rows.forEach((entry) => {
+          const meterNumber = String(entry["Equipment Number"] ?? "").trim();
+          const engineer = String(entry["Field Engineer"] ?? "").trim();
+          const rawStatus = String(entry["Status"] ?? "").trim();
+
+          if (!meterNumber || !engineer || !rawStatus) {
+            skippedIncomplete++;
+            return;
+          }
+
+          const normalizedStatus = normalizeStatus(rawStatus);
+          if (!normalizedStatus) {
+            invalidStatusRows.push({
+              "Equipment Number": meterNumber,
+              "Field Engineer": engineer,
+              Status: rawStatus,
+              reason: `"${rawStatus}" is not a recognized status. Allowed: ${ALLOWED_STATUSES.join(", ")} (or their aliases: ${Object.keys(STATUS_ALIASES).join(", ")})`,
+            });
+            return;
+          }
+
+          const key = `${meterNumber}-${engineer}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueEntries.push({
+              ...entry,
+              "Equipment Number": meterNumber,
+              "Field Engineer": engineer,
+              Status: normalizedStatus, // now guaranteed to be a valid enum value
+            });
+          }
+        });
+
+        if (skippedIncomplete > 0) {
+          console.warn(
+            `[meter-status] Skipped ${skippedIncomplete} incomplete row(s) (missing meter/engineer/status)`,
+          );
+        }
+        if (invalidStatusRows.length > 0) {
+          console.warn(
+            `[meter-status] Skipped ${invalidStatusRows.length} row(s) with unrecognized status value(s)`,
+          );
+        }
+        return { uniqueEntries, invalidStatusRows };
+      };
+
+      const { uniqueEntries: uniqueData, invalidStatusRows } =
+        getUniqueEntries(data);
+
+      if (uniqueData.length === 0) {
+        return res.status(400).json({
+          error:
+            "No valid rows found after parsing. Check that Equipment Number, Field Engineer, and Status are filled in for at least one row, and that Status values are recognized.",
+          invalidStatusRows,
+        });
+      }
+
+      // ---------- Lookup existing meters ----------
+      const checkMeterExistenceInDB = await MeterDB.find({
+        meterNumber: { $in: uniqueData.map((e) => e["Equipment Number"]) },
+      })
+        .sort({ updatedAt: -1 })
+        .populate("supervisor");
+
+      const existingMeterNumbers = new Set(
+        checkMeterExistenceInDB.map((m) => m.meterNumber),
+      );
+      const nonExistingMeters = uniqueData.filter(
+        (entry) => !existingMeterNumbers.has(entry["Equipment Number"]),
+      );
+
+      // ---------- Bulk update ----------
+      // NOTE: if the same meter number appears with two different engineers
+      // in this file, bulkWrite runs ordered by default, so the LAST matching
+      // row in the array wins and earlier rows for that meter get flipped to
+      // "Rejected" by the later row's updateMany. That's an actual behavioral
+      // choice, not a bug fix — call it out to your team if unintended.
+      const operations = uniqueData.flatMap((entry) => [
+        {
+          updateOne: {
+            filter: {
+              meterNumber: entry["Equipment Number"],
+              installerId: entry["Field Engineer"],
+            },
+            update: { $set: { status: entry["Status"] } },
+          },
+        },
+        {
+          updateMany: {
+            filter: {
+              meterNumber: entry["Equipment Number"],
+              installerId: { $ne: entry["Field Engineer"] },
+            },
+            update: {
+              $set: {
+                status: "rejected", // lowercase — must match schema enum exactly
+                remarks: `Meter has been assigned to ${entry["Field Engineer"]}.`,
+              },
+            },
+          },
+        },
+      ]);
+
+      let result;
+      try {
+        // runValidators: true makes Mongoose enforce the schema enum (and any
+        // other validators) on update operations too — by default Mongoose
+        // skips validation on updateOne/updateMany, so without this a status
+        // value that somehow slipped past normalizeStatus() would still get
+        // written straight into the DB instead of failing loudly.
+        result = await MeterDB.bulkWrite(operations, { runValidators: true });
+      } catch (dbErr) {
+        console.error("[meter-status] bulkWrite failed:", dbErr.message);
+        return res.status(500).json({ error: "Failed to update meter records" });
+      }
+
+      // ---------- Respond FIRST, then do best-effort notification work ----------
+      // Nothing after this point may throw into the outer try/catch, since
+      // headers are already sent. Each block below is individually guarded.
+      res.json({
+        message: "File processed successfully",
+        data: uniqueData,
+        result,
+        nonExistingMeters,
+        invalidStatusRows,
+      });
+
+      // ---------- Supervisor emails (fire-and-forget, fully isolated) ----------
+      setImmediate(async () => {
+        try {
+          const statusByMeterNumber = new Map(
+            uniqueData.map((entry) => [
+              entry["Equipment Number"],
+              entry["Status"],
+            ]),
+          );
+
+          const emailsBySupervisor = new Map();
+          const seenEntries = new Set();
+
+          for (const meter of checkMeterExistenceInDB) {
+            const email = meter.supervisor?.email;
+            if (!email) continue;
+
+            const newStatus = statusByMeterNumber.get(meter.meterNumber);
+            if (!newStatus) continue;
+
+            const dedupeKey = `${email}::${meter.meterNumber}`;
+            if (seenEntries.has(dedupeKey)) continue;
+            seenEntries.add(dedupeKey);
+
+            if (!emailsBySupervisor.has(email)) {
+              emailsBySupervisor.set(email, {
+                name: meter.supervisor.name || "Supervisor",
+                meters: [],
+              });
+            }
+            emailsBySupervisor.get(email).meters.push({
+              meterNumber: meter.meterNumber,
+              status: newStatus,
+            });
+          }
+
+          if (emailsBySupervisor.size === 0) {
+            console.log("[meter-status] No supervisor emails to send for this batch");
+            return;
+          }
+
+          const results = await Promise.allSettled(
+            Array.from(emailsBySupervisor.entries()).map(([email, info]) => {
+              const rows = info.meters
+                .map(
+                  (m) =>
+                    `<li><strong>${escapeHtml(m.meterNumber)}</strong> — ${escapeHtml(m.status)}</li>`,
+                )
+                .join("");
+
+              const textLines = info.meters
+                .map((m) => `- ${m.meterNumber}: ${m.status}`)
+                .join("\n");
+
+              const plural = info.meters.length > 1 ? "s" : "";
+
+              return sendEmail({
+                to: email,
+                subject: "Meter Status Update — Assign Meter",
+                text: `Hi ${info.name},
+
+This is an automated notification from Assign Meter.
+
+You are receiving this email because you assigned the meter${plural} listed below to a field installer through the Assign Meter app. The installer has since submitted an update, and the status of your meter${plural} has changed as follows:
+
+${textLines}
+
+Please log in to Assign Meter to review the full details.
+
+— Assign Meter`,
+                html: `
+    <p>Hi ${escapeHtml(info.name)},</p>
+    <p>This is an automated notification from <strong>Assign Meter</strong>.</p>
+    <p>
+      You are receiving this email because you assigned the meter${plural} listed below to a field installer
+      through the Assign Meter app. The installer has since submitted an update, and the status of your
+      meter${plural} has changed as follows:
+    </p>
+    <ul>${rows}</ul>
+    <p>Please log in to Assign Meter to review the full details.</p>
+    <p style="color:#888;font-size:12px;margin-top:24px;">— Assign Meter (automated notification)</p>
+  `,
+              }).then(
+                (r) => ({ email, ok: true, result: r }),
+                (err) => ({ email, ok: false, error: err }),
+              );
+            }),
+          );
+
+          const failed = results
+            .map((r) => r.value ?? r.reason)
+            .filter((r) => !r?.ok);
+
+          if (failed.length) {
+            console.error(
+              `[meter-status] ${failed.length}/${results.length} supervisor email(s) failed to send:`,
+              failed.map((f) => ({
+                email: f.email,
+                error: f.error?.message || f.error,
+              })),
+            );
+          } else {
+            console.log(
+              `[meter-status] Sent ${results.length} supervisor notification email(s) successfully`,
+            );
+          }
+        } catch (notifyErr) {
+          // Belt-and-braces: even if something above throws unexpectedly,
+          // it can never affect the already-sent HTTP response.
+          console.error(
+            "[meter-status] Unexpected error while sending supervisor notifications:",
+            notifyErr,
+          );
+        }
+      });
+    } catch (error) {
+      console.error("[meter-status] Error processing file:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  });
+});
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 module.exports = router;

@@ -27,7 +27,7 @@ router.get("/", async (req, res) => {
         message: "Unauthorized",
       });
     }
-    const findMeter = await MeterDB.findOne({ meterNumber }).populate("supervisor");
+    const findMeter = await MeterDB.find({ meterNumber }).populate("supervisor");
     if (!findMeter)
       return res
         .status(404)
