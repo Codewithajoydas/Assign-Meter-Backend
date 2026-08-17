@@ -6,8 +6,8 @@ const MeterDB = require("../models/meter");
 const XLSX = require("xlsx");
 const multer = require("multer");
 const { sendEmail } = require("../utils/send-mail");
-const {Resend} = require("resend");
-const resend  = new Resend(process.env.RESEND_API_KEY|| "");
+const { Resend } = require("resend");
+const resend = new Resend(process.env.RESEND_API_KEY || "");
 
 // Cap upload size (5MB) and restrict to one file — prevents memory-exhaustion DoS
 // from unbounded multer() defaults.
@@ -52,7 +52,9 @@ const STATUS_ALIASES = {
 };
 
 function normalizeStatus(raw) {
-  const key = String(raw ?? "").trim().toLowerCase();
+  const key = String(raw ?? "")
+    .trim()
+    .toLowerCase();
   const mapped = STATUS_ALIASES[key];
   return ALLOWED_STATUSES.includes(mapped) ? mapped : null;
 }
@@ -106,7 +108,9 @@ router.post("/", (req, res) => {
         workbook = XLSX.read(file.buffer, { type: "buffer" });
       } catch (parseErr) {
         console.error("[meter-status] XLSX parse failed:", parseErr.message);
-        return res.status(400).json({ error: "Could not read file. Is it a valid .xlsx/.csv?" });
+        return res
+          .status(400)
+          .json({ error: "Could not read file. Is it a valid .xlsx/.csv?" });
       }
 
       const sheetName = workbook.SheetNames[0];
@@ -127,7 +131,9 @@ router.post("/", (req, res) => {
       // produced empty rows.
       const actualToCanonical = {};
       headerRow.forEach((h) => {
-        const norm = String(h ?? "").trim().toLowerCase();
+        const norm = String(h ?? "")
+          .trim()
+          .toLowerCase();
         if (REQUIRED_HEADERS[norm]) {
           actualToCanonical[String(h).trim()] = REQUIRED_HEADERS[norm];
         }
@@ -246,7 +252,9 @@ router.post("/", (req, res) => {
               meterNumber: entry["Equipment Number"],
               installerId: entry["Field Engineer"],
             },
-            update: { $set: { status: entry["Status"] } },
+            update: {
+              $set: { status: entry["Status"], remarks: entry["Remarks"] || "" },
+            },
           },
         },
         {
@@ -275,7 +283,9 @@ router.post("/", (req, res) => {
         result = await MeterDB.bulkWrite(operations, { runValidators: true });
       } catch (dbErr) {
         console.error("[meter-status] bulkWrite failed:", dbErr.message);
-        return res.status(500).json({ error: "Failed to update meter records" });
+        return res
+          .status(500)
+          .json({ error: "Failed to update meter records" });
       }
 
       // ---------- Respond FIRST, then do best-effort notification work ----------
@@ -326,7 +336,9 @@ router.post("/", (req, res) => {
           }
 
           if (emailsBySupervisor.size === 0) {
-            console.log("[meter-status] No supervisor emails to send for this batch");
+            console.log(
+              "[meter-status] No supervisor emails to send for this batch",
+            );
             return;
           }
 
@@ -345,11 +357,12 @@ router.post("/", (req, res) => {
 
               const plural = info.meters.length > 1 ? "s" : "";
 
-              return resend.emails.send({
-                from: "Assign Meter <onboarding@resend.dev>",
-                to: email,
-                subject: "Meter Status Update — Assign Meter",
-                html: `
+              return resend.emails
+                .send({
+                  from: "Assign Meter <onboarding@resend.dev>",
+                  to: email,
+                  subject: "Meter Status Update — Assign Meter",
+                  html: `
     <p>Hi ${escapeHtml(info.name)},</p>
     <p>This is an automated notification from <strong>Assign Meter</strong>.</p>
     <p>
@@ -361,10 +374,11 @@ router.post("/", (req, res) => {
     <p>Please log in to Assign Meter to review the full details.</p>
     <p style="color:#888;font-size:12px;margin-top:24px;">— Assign Meter (automated notification)</p>
   `,
-              }).then(
-                (r) => ({ email, ok: true, result: r }),
-                (err) => ({ email, ok: false, error: err }),
-              );
+                })
+                .then(
+                  (r) => ({ email, ok: true, result: r }),
+                  (err) => ({ email, ok: false, error: err }),
+                );
             }),
           );
 
