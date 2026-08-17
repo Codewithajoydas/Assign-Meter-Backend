@@ -6,6 +6,8 @@ const MeterDB = require("../models/meter");
 const XLSX = require("xlsx");
 const multer = require("multer");
 const { sendEmail } = require("../utils/send-mail");
+const {Resend} = require("resend");
+const resend  = new Resend(process.env.RESEND_API_KEY|| "");
 
 // Cap upload size (5MB) and restrict to one file — prevents memory-exhaustion DoS
 // from unbounded multer() defaults.
@@ -343,20 +345,10 @@ router.post("/", (req, res) => {
 
               const plural = info.meters.length > 1 ? "s" : "";
 
-              return sendEmail({
+              return resend.emails.send({
+                from: "Assign Meter <onboarding@resend.dev>",
                 to: email,
                 subject: "Meter Status Update — Assign Meter",
-                text: `Hi ${info.name},
-
-This is an automated notification from Assign Meter.
-
-You are receiving this email because you assigned the meter${plural} listed below to a field installer through the Assign Meter app. The installer has since submitted an update, and the status of your meter${plural} has changed as follows:
-
-${textLines}
-
-Please log in to Assign Meter to review the full details.
-
-— Assign Meter`,
                 html: `
     <p>Hi ${escapeHtml(info.name)},</p>
     <p>This is an automated notification from <strong>Assign Meter</strong>.</p>
