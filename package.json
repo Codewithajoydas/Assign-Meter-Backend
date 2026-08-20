@@ -15,10 +15,11 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "dev": "npx nodemon index.js",
+    "dev": "npx nodemon --ignore temp/uploads/ --ignore reports/ index.js",
     "start": "node index.js"
   },
   "dependencies": {
+    "@duckdb/node-api": "^1.5.5-r.4",
     "archiver": "^7.0.1",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",

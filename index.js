@@ -5,12 +5,11 @@ const connectToMongo = require("./config/mongoose");
 const cookieParser = require("cookie-parser");
 app.use(cookieParser());
 
-
 connectToMongo();
 const cors = require("cors");
 const allowedOrigins = [
   "https://assign-meter-web.vercel.app",
-  "http://localhost:3000"
+  "http://localhost:3000",
 ];
 
 app.use(
@@ -34,7 +33,7 @@ app.get("/", (req, res) => {
 app.use("/api/signin", require("./routes/signin"));
 app.use("/api/signup", require("./routes/signup"));
 app.use("/api/meterassign", require("./routes/meterAssign"));
-app.use('/api/getmeterdetails', require('./routes/getMeterDetails'));
+app.use("/api/getmeterdetails", require("./routes/getMeterDetails"));
 app.use("/api/nicassign", require("./routes/nicAssign"));
 app.use("/api/simassign", require("./routes/simAssign"));
 app.use("/api/sealassign", require("./routes/sealAssign"));
@@ -45,8 +44,17 @@ app.use("/api/statusupdate", require("./routes/updateMeterStatus"));
 app.use("/api/wrongmeter", require("./routes/getInvalidMeters"));
 app.use("/api/assign-location", require("./routes/meterLocation"));
 app.use("/api/notification", require("./routes/notification"));
+app.use("/api/generateReport", require("./routes/generate_unmapped_report"));
+app.use(
+  "/api/last-unmapped-report",
+  require("./routes/get_last_unmapp_report"),
+);
 app.use("/events", require("./routes/sse"));
-app.use('/api/bledevices', require('./routes/bleDevices'));
+app.use("/api/bledevices", require("./routes/bleDevices"));
+app.use(
+  "/api/generate_unmapped_report_for_supervisor",
+  require("./routes/generate_unmapped_report_for_supervisor"),
+);
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log("server is running on port", port);
