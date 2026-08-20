@@ -13,7 +13,6 @@ const upload = multer({
 const REPORTS_DIR = "./reports";
 const SAVED_REPORT_PATH = path.resolve(REPORTS_DIR, "unmapped-report.csv");
 
-
 router.post(
   "/",
   upload.fields([
@@ -24,6 +23,7 @@ router.post(
   async (req, res) => {
     let uploadedFiles = [];
     let outputFile = "";
+    let connector;
 
     try {
       const files = req.files;
@@ -33,6 +33,14 @@ router.post(
       const miFile = files.mi?.[0];
 
       if (!commFile || !issueFile || !miFile) {
+        // Clean up any files that WERE uploaded, since multer already wrote them to disk
+        uploadedFiles = [commFile, issueFile, miFile].filter(Boolean);
+        await Promise.all(
+          uploadedFiles.map((file) =>
+            fs.unlink(file.path).catch(() => {})
+          )
+        );
+
         return res.status(400).json({
           error: "comm, issue and mi files are required",
         });
@@ -40,12 +48,14 @@ router.post(
 
       uploadedFiles = [commFile, issueFile, miFile];
 
-      const connector = await dbConnector();
+      connector = await dbConnector();
 
       outputFile = path.resolve(
         "./temp/uploads",
         `unmapped-result-${Date.now()}.csv`
       );
+
+      const escapePath = (p) => p.replace(/'/g, "''");
 
       await connector.run(`
         COPY (
@@ -75,7 +85,7 @@ router.post(
             END AS "Mapping Status"
 
           FROM read_csv_auto(
-            '${issueFile.path}',
+            '${escapePath(issueFile.path)}',
             types={
               "MSN": "VARCHAR",
               "Date of Issue": "VARCHAR",
@@ -87,7 +97,7 @@ router.post(
           ) issue
 
           LEFT JOIN read_csv_auto(
-            '${miFile.path}',
+            '${escapePath(miFile.path)}',
             types={
               "New Meter Serial No": "VARCHAR"
             }
@@ -95,7 +105,7 @@ router.post(
             ON issue."MSN" = mi."New Meter Serial No"
 
           LEFT JOIN read_csv_auto(
-            '${commFile.path}',
+            '${escapePath(commFile.path)}',
             types={
               "Meter Number": "VARCHAR",
               "Last Communication Date": "VARCHAR"
@@ -103,7 +113,7 @@ router.post(
           ) comm
             ON issue."MSN" = comm."Meter Number"
 
-        ) TO '${outputFile}'
+        ) TO '${escapePath(outputFile)}'
         WITH (
           HEADER,
           DELIMITER ',',
@@ -111,35 +121,37 @@ router.post(
         )
       `);
 
+      // Verify the output file was actually written before proceeding
+      const stat = await fs.stat(outputFile).catch(() => null);
+      if (!stat || stat.size === 0) {
+        throw new Error("Report generation produced an empty or missing file");
+      }
+
       // Delete uploaded input files
       await Promise.all(
-        uploadedFiles.map((file) => fs.unlink(file.path))
+        uploadedFiles.map((file) => fs.unlink(file.path).catch(() => {}))
       );
 
       // Make sure the reports folder exists (won't error if it already does)
       await fs.mkdir(REPORTS_DIR, { recursive: true });
 
       // Save a permanent copy of the latest report.
-      // copyFile overwrites SAVED_REPORT_PATH automatically if it already exists,
-      // so the old report simply gets replaced by the new one.
+      // NOTE: this still lives on Render's ephemeral disk and will be
+      // wiped on restart/redeploy — this route must be re-run after
+      // every deploy for the supervisor report endpoint to work.
       await fs.copyFile(outputFile, SAVED_REPORT_PATH);
 
       // Send CSV
-      res.download(
-        outputFile,
-        "unmapped-report.csv",
-        async (error) => {
-          // Delete generated CSV after response
-          try {
-            await fs.unlink(outputFile);
-          } catch {}
+      res.download(outputFile, "unmapped-report.csv", async (error) => {
+        // Delete generated CSV after response
+        try {
+          await fs.unlink(outputFile);
+        } catch {}
 
-          if (error) {
-            console.error("CSV download failed:", error);
-          }
+        if (error) {
+          console.error("CSV download failed:", error);
         }
-      );
-
+      });
     } catch (error) {
       console.error("DuckDB query failed:", error);
 
@@ -159,9 +171,19 @@ router.post(
         } catch {}
       }
 
-      res.status(500).json({
-        error: "Failed to process CSV files",
-      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Failed to process CSV files",
+        });
+      }
+    } finally {
+      if (connector && typeof connector.close === "function") {
+        try {
+          await connector.close();
+        } catch (closeErr) {
+          console.error("Error closing DuckDB connector:", closeErr);
+        }
+      }
     }
   }
 );
