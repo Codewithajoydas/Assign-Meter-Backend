@@ -3,8 +3,10 @@ const app = express();
 require("dotenv").config();
 const connectToMongo = require("./config/mongoose");
 const cookieParser = require("cookie-parser");
+const path = require("path");
+const __dir = path.resolve();
 app.use(cookieParser());
-
+app.use(express.static(path.join(__dir, "public")));
 connectToMongo();
 const cors = require("cors");
 const allowedOrigins = [

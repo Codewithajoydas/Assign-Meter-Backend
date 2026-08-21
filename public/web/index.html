@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="Assign Meter documentation portal — user guide, privacy policy and terms & conditions.">
+  <title>Assign Meter — Documentation</title>
+  <link rel="icon" type="image/x-icon" href="image.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <img src="image.png" alt="Assign Meter" width="100%" height="100%" style="border-radius: 10px;">
+        </div>
+        <div>
+          <div class="brand-name">Assign Meter</div>
+          <div class="brand-sub">Documentation</div>
+        </div>
+      </div>
+
+      <div class="sidebar-search">
+        <span>⌕</span>
+        <input id="searchInput" type="search" placeholder="Search docs..." autocomplete="off">
+        <kbd>⌘ K</kbd>
+      </div>
+
+      <nav id="nav" class="nav"></nav>
+
+      <div class="sidebar-footer">
+        <div class="status-dot"></div>
+        <span>Documentation · v1.1.0</span>
+      </div>
+    </aside>
+
+    <div class="backdrop" id="backdrop"></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open navigation">☰</button>
+        <div class="breadcrumbs" id="breadcrumbs"></div>
+        <div class="top-actions">
+          <button class="icon-btn" id="themeBtn" aria-label="Toggle theme">◐</button>
+          <a class="github-link" href="https://github.com/Codewithajoydas" target="_blank" rel="noreferrer">GitHub ↗</a>
+        </div>
+      </header>
+
+      <section class="hero" id="hero">
+        <div class="hero-glow"></div>
+        <div class="eyebrow">FIELD OPERATIONS PLATFORM</div>
+        <h1>Assign Meter<br><span>Documentation</span></h1>
+        <p>Everything your field engineers, supervisors, and administrators need to operate Assign Meter confidently.</p>
+        <div class="hero-actions">
+          <button class="primary-btn" data-doc="guide">Read the User Guide <span>→</span></button>
+          <button class="secondary-btn" data-doc="privacy">Privacy & Security</button>
+        </div>
+      </section>
+
+      <section class="quick-grid" id="quickGrid">
+        <button class="doc-card" data-doc="guide">
+          <span class="card-icon blue">↗</span>
+          <span><strong>User Guide</strong><small>Installation, workflows, permissions & troubleshooting</small></span>
+          <span class="card-arrow">→</span>
+        </button>
+        <button class="doc-card" data-doc="privacy">
+          <span class="card-icon green">✓</span>
+          <span><strong>Privacy Policy</strong><small>Data collection, security, storage & rights</small></span>
+          <span class="card-arrow">→</span>
+        </button>
+        <button class="doc-card" data-doc="terms">
+          <span class="card-icon purple">§</span>
+          <span><strong>Terms & Conditions</strong><small>Usage, licensing, responsibilities & legal terms</small></span>
+          <span class="card-arrow">→</span>
+        </button>
+      </section>
+
+      <div class="content-layout">
+        <article class="content" id="content"></article>
+        <aside class="toc" id="toc">
+          <div class="toc-title">On this page</div>
+          <div id="tocLinks"></div>
+        </aside>
+      </div>
+
+      <footer class="footer">
+        <div>
+          <strong>Assign Meter</strong>
+          <span>Built by CODEWITHAJOYDAS</span>
+        </div>
+        <div>© 2026 · Documentation</div>
+      </footer>
+    </main>
+  </div>
+
+  <div class="search-modal" id="searchModal" aria-hidden="true">
+    <div class="search-panel">
+      <div class="search-modal-top">
+        <input id="globalSearch" type="search" placeholder="Search User Guide, Privacy Policy, Terms...">
+        <button id="closeSearch">Esc</button>
+      </div>
+      <div id="searchResults" class="search-results"></div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
