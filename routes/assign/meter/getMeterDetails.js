@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const MeterDB = require("../models/meter");
-const UserDB = require("../models/user");
+const MeterDB = require("../../../models/meter");
+const UserDB = require("../../../models/user");
 const jwt = require("jsonwebtoken");
 
 router.get("/", async (req, res) => {

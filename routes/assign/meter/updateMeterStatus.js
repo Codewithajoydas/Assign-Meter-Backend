@@ -1,11 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
-const UserDB = require("../models/user");
-const MeterDB = require("../models/meter");
+const UserDB = require("../../../models/user");
+const MeterDB = require("../../../models/meter");
 const XLSX = require("xlsx");
 const multer = require("multer");
-const { sendEmail } = require("../utils/send-mail");
+const { sendEmail } = require("../../../utils/send-mail");
 const { Resend } = require("resend");
 const resend = new Resend(process.env.RESEND_API_KEY || "");
 

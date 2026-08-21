@@ -4,7 +4,7 @@ const router = express.Router();
 const {
     addClient,
     removeClient,
-} = require("../config/sse.config");
+} = require("../../config/sse.config");
 
 router.get("/", (req, res) => {
 

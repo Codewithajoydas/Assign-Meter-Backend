@@ -2,16 +2,21 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs").promises;
-const dbConnector = require("../utils/duckdbConnector");
+const dbConnector = require("../../utils/duckdbConnector");
+
+const {
+  PutObjectCommand,
+} = require("@aws-sdk/client-s3");
+
+const s3 = require("../../utils/s3");
+
 const router = express.Router();
 
 const upload = multer({
   dest: "./temp/uploads",
 });
 
-// Folder where the latest generated report is saved permanently
-const REPORTS_DIR = "./reports";
-const SAVED_REPORT_PATH = path.resolve(REPORTS_DIR, "unmapped-report.csv");
+const S3_REPORT_KEY = "reports/unmapped-report.csv";
 
 router.post(
   "/",
@@ -33,8 +38,8 @@ router.post(
       const miFile = files.mi?.[0];
 
       if (!commFile || !issueFile || !miFile) {
-        // Clean up any files that WERE uploaded, since multer already wrote them to disk
         uploadedFiles = [commFile, issueFile, miFile].filter(Boolean);
+
         await Promise.all(
           uploadedFiles.map((file) =>
             fs.unlink(file.path).catch(() => {})
@@ -121,41 +126,65 @@ router.post(
         )
       `);
 
-      // Verify the output file was actually written before proceeding
+      // Verify generated file
       const stat = await fs.stat(outputFile).catch(() => null);
+
       if (!stat || stat.size === 0) {
-        throw new Error("Report generation produced an empty or missing file");
+        throw new Error(
+          "Report generation produced an empty or missing file"
+        );
       }
 
-      // Delete uploaded input files
-      await Promise.all(
-        uploadedFiles.map((file) => fs.unlink(file.path).catch(() => {}))
+      // Upload generated report to S3
+      //
+      // IMPORTANT:
+      // Using the same Key automatically replaces the previous object.
+      const reportBuffer = await fs.readFile(outputFile);
+
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: process.env.AWS_S3_BUCKET_NAME,
+          Key: S3_REPORT_KEY,
+          Body: reportBuffer,
+          ContentType: "text/csv",
+        })
       );
 
-      // Make sure the reports folder exists (won't error if it already does)
-      await fs.mkdir(REPORTS_DIR, { recursive: true });
+      console.log(
+        `Report uploaded to S3: ${S3_REPORT_KEY}`
+      );
 
-      // Save a permanent copy of the latest report.
-      // NOTE: this still lives on Render's ephemeral disk and will be
-      // wiped on restart/redeploy — this route must be re-run after
-      // every deploy for the supervisor report endpoint to work.
-      await fs.copyFile(outputFile, SAVED_REPORT_PATH);
+      // Delete original uploaded input files
+      await Promise.all(
+        uploadedFiles.map((file) =>
+          fs.unlink(file.path).catch(() => {})
+        )
+      );
 
-      // Send CSV
-      res.download(outputFile, "unmapped-report.csv", async (error) => {
-        // Delete generated CSV after response
-        try {
-          await fs.unlink(outputFile);
-        } catch {}
+      // Send generated CSV to admin
+      res.download(
+        outputFile,
+        "unmapped-report.csv",
+        async (error) => {
+          try {
+            await fs.unlink(outputFile);
+          } catch {}
 
-        if (error) {
-          console.error("CSV download failed:", error);
+          if (error) {
+            console.error(
+              "CSV download failed:",
+              error
+            );
+          }
         }
-      });
+      );
     } catch (error) {
-      console.error("DuckDB query failed:", error);
+      console.error(
+        "Report generation failed:",
+        error
+      );
 
-      // Cleanup uploaded files
+      // Cleanup input files
       await Promise.all(
         uploadedFiles.map(async (file) => {
           try {
@@ -164,7 +193,7 @@ router.post(
         })
       );
 
-      // Cleanup output file
+      // Cleanup generated file
       if (outputFile) {
         try {
           await fs.unlink(outputFile);
@@ -177,11 +206,17 @@ router.post(
         });
       }
     } finally {
-      if (connector && typeof connector.close === "function") {
+      if (
+        connector &&
+        typeof connector.close === "function"
+      ) {
         try {
           await connector.close();
         } catch (closeErr) {
-          console.error("Error closing DuckDB connector:", closeErr);
+          console.error(
+            "Error closing DuckDB connector:",
+            closeErr
+          );
         }
       }
     }

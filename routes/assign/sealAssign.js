@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const sealDB = require("../models/meterSeal");
-const UserDB = require("../models/user");
+const sealDB = require("../../models/meterSeal");
+const UserDB = require("../../models/user");
 const jwt = require("jsonwebtoken");
 
 router.post("/", async (req, res) => {

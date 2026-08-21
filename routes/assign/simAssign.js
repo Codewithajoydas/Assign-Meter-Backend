@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const SIMDB = require("../models/simCard");
-const UserDB = require("../models/user");
+const SIMDB = require("../../models/simCard");
+const UserDB = require("../../models/user");
 const jwt = require("jsonwebtoken");
 
 router.post("/", async (req, res) => {

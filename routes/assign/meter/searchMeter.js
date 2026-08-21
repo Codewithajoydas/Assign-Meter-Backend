@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
-const UserDB = require("../models/user");
-const MeterDB = require("../models/meter");
+const UserDB = require("../../../models/user");
+const MeterDB = require("../../../models/meter");
 
 router.get("/", async (req, res) => {
   const token = req?.headers?.authorization?.split(" ")[1];

@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const UserDB = require("../models/user");
+const UserDB = require("../../models/user");
 
 
 router.post("/", async (req, res) => {

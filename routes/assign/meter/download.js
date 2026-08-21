@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
-const meterDB = require("../models/meter");
+const meterDB = require("../../../models/meter");
 const jwt = require("jsonwebtoken");
 const ExcelJS = require("exceljs");
 const archiver = require("archiver");
-const userDB = require("../models/user");
+const userDB = require("../../../models/user");
 
 // // ---------------- UTIL ----------------
 // function formatDate(date) {

@@ -30,30 +30,30 @@ app.get("/", (req, res) => {
   res.json({ message: "Server is running" });
 });
 
-app.use("/api/signin", require("./routes/signin"));
-app.use("/api/signup", require("./routes/signup"));
-app.use("/api/meterassign", require("./routes/meterAssign"));
-app.use("/api/getmeterdetails", require("./routes/getMeterDetails"));
-app.use("/api/nicassign", require("./routes/nicAssign"));
-app.use("/api/simassign", require("./routes/simAssign"));
-app.use("/api/sealassign", require("./routes/sealAssign"));
-app.use("/api/download", require("./routes/download"));
-app.use("/api/searchmeter", require("./routes/searchMeter"));
-app.use("/api/createuser", require("./routes/createUser"));
-app.use("/api/statusupdate", require("./routes/updateMeterStatus"));
-app.use("/api/wrongmeter", require("./routes/getInvalidMeters"));
-app.use("/api/assign-location", require("./routes/meterLocation"));
-app.use("/api/notification", require("./routes/notification"));
-app.use("/api/generateReport", require("./routes/generate_unmapped_report"));
+app.use("/api/signin", require("./routes/auth/signin"));
+app.use("/api/signup", require("./routes/auth/signup"));
+app.use("/api/meterassign", require("./routes/assign/meter/meterAssign"));
+app.use("/api/getmeterdetails", require("./routes/assign/meter/getMeterDetails"));
+app.use("/api/nicassign", require("./routes/assign/nicAssign"));
+app.use("/api/simassign", require("./routes/assign/simAssign"));
+app.use("/api/sealassign", require("./routes/assign/sealAssign"));
+app.use("/api/download", require("./routes/assign/meter/download"));
+app.use("/api/searchmeter", require("./routes/assign/meter/searchMeter"));
+app.use("/api/createuser", require("./routes/workforce/createUser"));
+app.use("/api/statusupdate", require("./routes/assign/meter/updateMeterStatus"));
+app.use("/api/wrongmeter", require("./routes/others/getInvalidMeters"));
+app.use("/api/assign-location", require("./routes/others/meterLocation"));
+app.use("/api/notification", require("./routes/others/notification"));
+app.use("/api/generateReport", require("./routes/reports/generate_unmapped_report"));
 app.use(
   "/api/last-unmapped-report",
-  require("./routes/get_last_unmapp_report"),
+  require("./routes/reports/get_last_unmapp_report"),
 );
-app.use("/events", require("./routes/sse"));
-app.use("/api/bledevices", require("./routes/bleDevices"));
+app.use("/events", require("./routes/sse/sse"));
+app.use("/api/bledevices", require("./routes/others/bleDevices"));
 app.use(
   "/api/generate_unmapped_report_for_supervisor",
-  require("./routes/generate_unmapped_report_for_supervisor"),
+  require("./routes/reports/generate_unmapped_report_for_supervisor"),
 );
 const port = process.env.PORT;
 app.listen(port, () => {

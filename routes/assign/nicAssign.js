@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const NICDB = require("../models/nicDevice.js");
-const UserDB = require("../models/user.js");
+const NICDB = require("../../models/nicDevice.js");
+const UserDB = require("../../models/user.js");
 const jwt = require("jsonwebtoken");
 
 router.post("/", async (req, res) => {

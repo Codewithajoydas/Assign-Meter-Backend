@@ -1,8 +1,8 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const ExcelJS = require("exceljs");
-const UserDB = require("../models/user");
-const DeviceDB = require("../models/bleDevices");
+const UserDB = require("../../models/user");
+const DeviceDB = require("../../models/bleDevices");
 
 const router = express.Router();
 
