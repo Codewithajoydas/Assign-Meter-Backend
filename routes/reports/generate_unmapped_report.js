@@ -71,6 +71,8 @@ router.post(
             issue."Type of Meter",
             issue."Store",
             issue."Name of Employee",
+            issue."Installer Name",
+            issue."Subdivision Name",
             comm."Last Communication Date",
 
             CASE
@@ -87,7 +89,26 @@ router.post(
                 THEN 'Pending'
 
               ELSE 'Unmapped'
-            END AS "Mapping Status"
+            END AS "Mapping Status",
+
+            CASE
+              WHEN TRY_CAST(issue."Date of Issue" AS DATE) IS NULL
+                THEN 'Unknown'
+
+              WHEN (CURRENT_DATE - TRY_CAST(issue."Date of Issue" AS DATE)) > 180
+                THEN '180 Days Above'
+
+              WHEN (CURRENT_DATE - TRY_CAST(issue."Date of Issue" AS DATE)) > 90
+                THEN '90-180 Days'
+
+              WHEN (CURRENT_DATE - TRY_CAST(issue."Date of Issue" AS DATE)) > 60
+                THEN '60-90 Days'
+
+              WHEN (CURRENT_DATE - TRY_CAST(issue."Date of Issue" AS DATE)) > 30
+                THEN '30-60 Days'
+
+              ELSE 'Below 30 Days'
+            END AS "Issue Age"
 
           FROM read_csv_auto(
             '${escapePath(issueFile.path)}',
