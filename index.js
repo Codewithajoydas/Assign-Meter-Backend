@@ -35,18 +35,32 @@ app.get("/", (req, res) => {
 app.use("/api/signin", require("./routes/auth/signin"));
 app.use("/api/signup", require("./routes/auth/signup"));
 app.use("/api/meterassign", require("./routes/assign/meter/meterAssign"));
-app.use("/api/getmeterdetails", require("./routes/assign/meter/getMeterDetails"));
+app.use(
+  "/api/getmeterdetails",
+  require("./routes/assign/meter/getMeterDetails"),
+);
 app.use("/api/nicassign", require("./routes/assign/nicAssign"));
 app.use("/api/simassign", require("./routes/assign/simAssign"));
 app.use("/api/sealassign", require("./routes/assign/sealAssign"));
 app.use("/api/download", require("./routes/assign/meter/download"));
 app.use("/api/searchmeter", require("./routes/assign/meter/searchMeter"));
+
 app.use("/api/createuser", require("./routes/workforce/createUser"));
-app.use("/api/statusupdate", require("./routes/assign/meter/updateMeterStatus"));
+app.use("/api/deleteuser", require("./routes/workforce/deleteUser"));
+app.use("/api/getusers", require("./routes/workforce/readUser"));
+app.use("/api/updateuser", require("./routes/workforce/updateUser"));
+
+app.use(
+  "/api/statusupdate",
+  require("./routes/assign/meter/updateMeterStatus"),
+);
 app.use("/api/wrongmeter", require("./routes/others/getInvalidMeters"));
 app.use("/api/assign-location", require("./routes/others/meterLocation"));
 app.use("/api/notification", require("./routes/others/notification"));
-app.use("/api/generateReport", require("./routes/reports/generate_unmapped_report"));
+app.use(
+  "/api/generateReport",
+  require("./routes/reports/generate_unmapped_report"),
+);
 app.use(
   "/api/last-unmapped-report",
   require("./routes/reports/get_last_unmapp_report"),
@@ -57,6 +71,9 @@ app.use(
   "/api/generate_unmapped_report_for_supervisor",
   require("./routes/reports/generate_unmapped_report_for_supervisor"),
 );
+
+app.use("/api/pivottabls/getallinstallername", require("./routes/reports/generate_pivot_table"));
+
 const port = process.env.PORT;
 app.listen(port, () => {
   console.log("server is running on port", port);

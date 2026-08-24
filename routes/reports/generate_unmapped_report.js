@@ -92,23 +92,63 @@ router.post(
             END AS "Mapping Status",
 
             CASE
-              WHEN TRY_CAST(issue."Date of Issue" AS DATE) IS NULL
-                THEN 'Unknown'
+  WHEN COALESCE(
+    TRY_STRPTIME(issue."Date of Issue", '%m/%d/%Y'),
+    TRY_STRPTIME(issue."Date of Issue", '%d/%m/%Y'),
+    TRY_STRPTIME(issue."Date of Issue", '%d-%m-%Y')
+  ) IS NULL
+    THEN 'Unknown'
 
-              WHEN (CURRENT_DATE - TRY_CAST(issue."Date of Issue" AS DATE)) > 180
-                THEN '180 Days Above'
+  WHEN (
+    CURRENT_DATE -
+    CAST(
+      COALESCE(
+        TRY_STRPTIME(issue."Date of Issue", '%m/%d/%Y'),
+        TRY_STRPTIME(issue."Date of Issue", '%d/%m/%Y'),
+        TRY_STRPTIME(issue."Date of Issue", '%d-%m-%Y')
+      ) AS DATE
+    )
+  ) > 180
+    THEN '180 Days Above'
 
-              WHEN (CURRENT_DATE - TRY_CAST(issue."Date of Issue" AS DATE)) > 90
-                THEN '90-180 Days'
+  WHEN (
+    CURRENT_DATE -
+    CAST(
+      COALESCE(
+        TRY_STRPTIME(issue."Date of Issue", '%m/%d/%Y'),
+        TRY_STRPTIME(issue."Date of Issue", '%d/%m/%Y'),
+        TRY_STRPTIME(issue."Date of Issue", '%d-%m-%Y')
+      ) AS DATE
+    )
+  ) > 90
+    THEN '90-180 Days'
 
-              WHEN (CURRENT_DATE - TRY_CAST(issue."Date of Issue" AS DATE)) > 60
-                THEN '60-90 Days'
+  WHEN (
+    CURRENT_DATE -
+    CAST(
+      COALESCE(
+        TRY_STRPTIME(issue."Date of Issue", '%m/%d/%Y'),
+        TRY_STRPTIME(issue."Date of Issue", '%d/%m/%Y'),
+        TRY_STRPTIME(issue."Date of Issue", '%d-%m-%Y')
+      ) AS DATE
+    )
+  ) > 60
+    THEN '60-90 Days'
 
-              WHEN (CURRENT_DATE - TRY_CAST(issue."Date of Issue" AS DATE)) > 30
-                THEN '30-60 Days'
+  WHEN (
+    CURRENT_DATE -
+    CAST(
+      COALESCE(
+        TRY_STRPTIME(issue."Date of Issue", '%m/%d/%Y'),
+        TRY_STRPTIME(issue."Date of Issue", '%d/%m/%Y'),
+        TRY_STRPTIME(issue."Date of Issue", '%d-%m-%Y')
+      ) AS DATE
+    )
+  ) > 30
+    THEN '30-60 Days'
 
-              ELSE 'Below 30 Days'
-            END AS "Issue Age"
+  ELSE 'Below 30 Days'
+END AS "Issue Age"
 
           FROM read_csv_auto(
             '${escapePath(issueFile.path)}',
