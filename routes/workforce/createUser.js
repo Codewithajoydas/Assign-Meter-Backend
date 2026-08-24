@@ -5,19 +5,16 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
 router.post("/", async (req, res) => {
-  const authHeader = req.headers.authorization;
+  console.log("route hit");
+  const token = req.cookies.access_token;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (!token) {
     return res.status(401).json({
       status: "error",
       message: "Unauthorized",
     });
   }
-
-  const token = authHeader.split(" ")[1];
-
-  const { name, email, password, isAdmin } = req.body;
-
+  const { name, email, password, isAdmin } = req?.body;
   if (!name || !email || !password || isAdmin === undefined) {
     return res.status(400).json({
       status: "error",

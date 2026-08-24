@@ -7,6 +7,8 @@ const path = require("path");
 const __dir = path.resolve();
 app.use(cookieParser());
 app.use(express.static(path.join(__dir, "public")));
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }));
 connectToMongo();
 const cors = require("cors");
 const allowedOrigins = [
