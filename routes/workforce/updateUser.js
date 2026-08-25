@@ -9,39 +9,59 @@ const UserDB = require("../../models/user");
 // Update user information
 router.patch("/", async (req, res) => {
   try {
-    // Get authentication token
-    const token = req.cookies.access_token;
+    // ---------------------------------------------
+    // 1. Get token from Authorization header
+    // ---------------------------------------------
+    const authorization = req.headers.authorization;
 
-    if (!token) {
+    if (!authorization?.startsWith("Bearer ")) {
       return res.status(401).json({
         status: "error",
         message: "Unauthorized",
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const token = authorization.split(" ")[1];
 
-    // Find logged-in admin
-    const user = await UserDB.findById(decoded.id);
+    // ---------------------------------------------
+    // 2. Verify token
+    // ---------------------------------------------
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
 
-    if (!user) {
-      return res.status(404).json({
+    // ---------------------------------------------
+    // 3. Find logged-in user
+    // ---------------------------------------------
+    const currentUser = await UserDB.findById(decoded.id);
+
+    if (!currentUser) {
+      return res.status(401).json({
         status: "error",
-        message: "User not found",
+        message: "Unauthorized",
       });
     }
 
-    // Only admin can update users
-    if (!user.isAdmin) {
+    // ---------------------------------------------
+    // 4. Only admin can update users
+    // ---------------------------------------------
+    if (!currentUser.isAdmin) {
       return res.status(403).json({
         status: "error",
         message: "You are not authorized to update users",
       });
     }
 
-    // Get target user's email
-    const { email, password, ...updates } = req.body;
+    // ---------------------------------------------
+    // 5. Get request data
+    // ---------------------------------------------
+    const {
+      email,
+      name,
+      password,
+      isAdmin,
+    } = req.body;
 
     if (!email) {
       return res.status(400).json({
@@ -50,29 +70,62 @@ router.patch("/", async (req, res) => {
       });
     }
 
-    // Find target user
-    const findUser = await UserDB.findOne({ email });
+    // ---------------------------------------------
+    // 6. Find target user
+    // ---------------------------------------------
+    const targetUser = await UserDB.findOne({ email });
 
-    if (!findUser) {
+    if (!targetUser) {
       return res.status(404).json({
         status: "error",
         message: "User not found",
       });
     }
 
-    // Update password if provided
+    // ---------------------------------------------
+    // 7. Build allowed updates
+    // ---------------------------------------------
+    const updates = {};
+
+    if (name !== undefined) {
+      updates.name = name;
+    }
+
+    if (isAdmin !== undefined) {
+      updates.isAdmin = isAdmin;
+    }
+
+    // ---------------------------------------------
+    // 8. Update password if provided
+    // ---------------------------------------------
     if (password) {
       if (password.length < 6) {
         return res.status(400).json({
           status: "error",
-          message: "Password must be at least 6 characters long",
+          message:
+            "Password must be at least 6 characters long",
         });
       }
 
-      updates.password = await bcrypt.hash(password, 10);
+      updates.password = await bcrypt.hash(
+        password,
+        10
+      );
     }
 
-    // Update user
+    // ---------------------------------------------
+    // 9. Make sure there is something to update
+    // ---------------------------------------------
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        status: "error",
+        message: "No valid fields provided for update",
+      });
+    }
+
+    // ---------------------------------------------
+    // 10. Update user
+    // ---------------------------------------------
     const updatedUser = await UserDB.findOneAndUpdate(
       { email },
       { $set: updates },
@@ -82,15 +135,33 @@ router.patch("/", async (req, res) => {
       }
     ).select("-password");
 
+    // ---------------------------------------------
+    // 11. Send response
+    // ---------------------------------------------
     return res.status(200).json({
       status: "success",
       message: "User information updated successfully",
       user: updatedUser,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Update user error:", error);
 
+    // ---------------------------------------------
+    // Invalid / expired JWT
+    // ---------------------------------------------
+    if (
+      error.name === "JsonWebTokenError" ||
+      error.name === "TokenExpiredError"
+    ) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid or expired token",
+      });
+    }
+
+    // ---------------------------------------------
     // Duplicate email
+    // ---------------------------------------------
     if (error.code === 11000) {
       return res.status(409).json({
         status: "error",
@@ -98,6 +169,9 @@ router.patch("/", async (req, res) => {
       });
     }
 
+    // ---------------------------------------------
+    // Other server errors
+    // ---------------------------------------------
     return res.status(500).json({
       status: "error",
       message: "Internal server error",

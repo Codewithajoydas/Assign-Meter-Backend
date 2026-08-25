@@ -9,48 +9,82 @@ const jwt = require("jsonwebtoken");
 // Read all users
 router.get("/", async (req, res) => {
   try {
-    // Get authentication token
-    const token = req.cookies.access_token;
+    // ---------------------------------------------
+    // 1. Get token from Authorization header
+    // ---------------------------------------------
+    const authorization = req.headers.authorization;
 
-    if (!token) {
+    if (!authorization?.startsWith("Bearer ")) {
       return res.status(401).json({
         status: "error",
         message: "Unauthorized",
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const token = authorization.split(" ")[1];
 
-    // Find logged-in user
-    const user = await UserDB.findById(decoded.id);
+    // ---------------------------------------------
+    // 2. Verify token
+    // ---------------------------------------------
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET
+    );
 
-    if (!user) {
-      return res.status(404).json({
+    // ---------------------------------------------
+    // 3. Find logged-in user
+    // ---------------------------------------------
+    const currentUser = await UserDB.findById(decoded.id);
+
+    if (!currentUser) {
+      return res.status(401).json({
         status: "error",
-        message: "User not found",
+        message: "Unauthorized",
       });
     }
 
-    // Only admin can read all users
-    if (!user.isAdmin) {
+    // ---------------------------------------------
+    // 4. Only admin can read all users
+    // ---------------------------------------------
+    if (!currentUser.isAdmin) {
       return res.status(403).json({
         status: "error",
         message: "You are not authorized to view users",
       });
     }
 
-    // Get all users
+    // ---------------------------------------------
+    // 5. Get all users
+    // ---------------------------------------------
     const users = await UserDB.find();
 
+    // ---------------------------------------------
+    // 6. Send response
+    // ---------------------------------------------
     return res.status(200).json({
       status: "success",
       count: users.length,
       users,
     });
   } catch (error) {
-    console.error(error);
+    console.error("Get users error:", error);
 
+    // ---------------------------------------------
+    // Invalid / expired JWT
+    // ---------------------------------------------
+    if (
+      error.name === "JsonWebTokenError" ||
+      error.name === "TokenExpiredError"
+    ) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid or expired token",
+      });
+    }
+
+    // ---------------------------------------------
+    // Other server errors
+    // ---------------------------------------------
     return res.status(500).json({
       status: "error",
       message: "Internal server error",
