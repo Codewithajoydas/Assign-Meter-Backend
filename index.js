@@ -37,6 +37,7 @@ app.get("/", (req, res) => {
 app.use("/api/signin", require("./routes/auth/signin"));
 app.use("/api/signup", require("./routes/auth/signup"));
 app.use("/api/meterassign", require("./routes/assign/meter/meterAssign"));
+app.use("/api/deletemeter", require("./routes/assign/meter/deleteMeters"));
 app.use(
   "/api/getmeterdetails",
   require("./routes/assign/meter/getMeterDetails"),
