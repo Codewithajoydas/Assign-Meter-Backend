@@ -1,55 +1,26 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-
 const router = express.Router();
-
 const UserDB = require("../../models/user");
+const AuthMiddleware = require("../../middleware/authentication");
+const { allowRoles } = require("../../middleware/rbac");
+
+router.use(AuthMiddleware);
+router.use(allowRoles("superadmin", "admin"));
 
 // Update user information
 router.patch("/", async (req, res) => {
   try {
     // ---------------------------------------------
-    // 1. Get token from Authorization header
+    // 1. Get current user
     // ---------------------------------------------
-    const authorization = req.headers.authorization;
-
-    if (!authorization?.startsWith("Bearer ")) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
-
-    const token = authorization.split(" ")[1];
-
-    // ---------------------------------------------
-    // 2. Verify token
-    // ---------------------------------------------
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    // ---------------------------------------------
-    // 3. Find logged-in user
-    // ---------------------------------------------
-    const currentUser = await UserDB.findById(decoded.id);
+    const currentUser = req?.user;
 
     if (!currentUser) {
       return res.status(401).json({
         status: "error",
         message: "Unauthorized",
-      });
-    }
-
-    // ---------------------------------------------
-    // 4. Only admin can update users
-    // ---------------------------------------------
-    if (!currentUser.isAdmin) {
-      return res.status(403).json({
-        status: "error",
-        message: "You are not authorized to update users",
       });
     }
 
@@ -73,7 +44,7 @@ router.patch("/", async (req, res) => {
     // ---------------------------------------------
     // 6. Find target user
     // ---------------------------------------------
-    const targetUser = await UserDB.findOne({ email });
+    const targetUser = await UserDB.findOne({ email, pkg: currentUser.pkg });
 
     if (!targetUser) {
       return res.status(404).json({

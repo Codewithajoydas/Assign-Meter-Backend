@@ -5,58 +5,21 @@ const router = express.Router();
 const UserDB = require("../../models/user");
 
 const jwt = require("jsonwebtoken");
+const AuthMiddleware = require("../../middleware/authentication");
+const { allowRoles } = require("../../middleware/rbac");
+
+router.use(AuthMiddleware);
+router.use(allowRoles("superadmin", "admin"));
 
 // Read all users
 router.get("/", async (req, res) => {
   try {
-    // ---------------------------------------------
-    // 1. Get token from Authorization header
-    // ---------------------------------------------
-    const authorization = req.headers.authorization;
-
-    if (!authorization?.startsWith("Bearer ")) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
-
-    const token = authorization.split(" ")[1];
-
-    // ---------------------------------------------
-    // 2. Verify token
-    // ---------------------------------------------
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    // ---------------------------------------------
-    // 3. Find logged-in user
-    // ---------------------------------------------
-    const currentUser = await UserDB.findById(decoded.id);
-
-    if (!currentUser) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
-
-    // ---------------------------------------------
-    // 4. Only admin can read all users
-    // ---------------------------------------------
-    if (!currentUser.isAdmin) {
-      return res.status(403).json({
-        status: "error",
-        message: "You are not authorized to view users",
-      });
-    }
-
+   const user = req?.user;
+   const pkg = user?.pkg;
     // ---------------------------------------------
     // 5. Get all users
     // ---------------------------------------------
-    const users = await UserDB.find();
+    const users = await UserDB.find({ pkg });
 
     // ---------------------------------------------
     // 6. Send response

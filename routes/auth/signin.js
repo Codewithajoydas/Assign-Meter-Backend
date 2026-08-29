@@ -41,7 +41,7 @@ router.post("/", async (req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      isAdmin: user.isAdmin,
+      role:user.role
     };
 
     res.status(200).json({

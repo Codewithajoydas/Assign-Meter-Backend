@@ -1,69 +1,35 @@
 const express = require("express");
 const router = express.Router();
-
 const fs = require("node:fs");
 const fsp = require("node:fs").promises;
 const path = require("node:path");
 const { pipeline } = require("node:stream/promises");
-
 const jwt = require("jsonwebtoken");
-
 const userDB = require("../../models/user");
 const meter = require("../../models/meter");
-const dbConnector = require("../../utils/duckdbConnector");
-
+const dbConnector = require("../../utils/duckdbConnector.js");
 const {
   GetObjectCommand,
 } = require("@aws-sdk/client-s3");
-
 const s3 = require("../../utils/s3");
-
+const AuthMiddleware = require("../../middleware/authentication.js");
+const { allowRoles } = require("../../middleware/rbac.js");
 const S3_REPORT_KEY = "reports/unmapped-report.csv";
 
+router.use(AuthMiddleware);
+router.use(allowRoles("admin", "superadmin", "supervisor"));
 router.get("/", async (req, res) => {
   let connector;
   let tempReportPath = "";
 
   try {
-    // Get token
-    const token =
-      req.headers.authorization?.split(" ")[1];
-
-    if (!token) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
-
-    // Verify JWT
-    let decoded;
-
-    try {
-      decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET
-      );
-    } catch (jwtErr) {
-      return res.status(401).json({
-        status: "error",
-        message: "Invalid or expired token",
-      });
-    }
-
-    // Find user
-    const user = await userDB.findById(decoded.id);
-
-    if (!user) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
+    const user = req.user;
+    const pkg = user.pkg;
 
     // Find meters assigned to supervisor
     const meters = await meter.find({
       supervisor: user._id,
+      pkg
     });
 
     const meterNumbers = meters.map((item) =>
@@ -102,7 +68,7 @@ router.get("/", async (req, res) => {
       s3Response = await s3.send(
         new GetObjectCommand({
           Bucket: process.env.AWS_S3_BUCKET_NAME,
-          Key: S3_REPORT_KEY,
+          Key: `${pkg}/${S3_REPORT_KEY}`,
         })
       );
     } catch (error) {

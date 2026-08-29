@@ -2,13 +2,15 @@ const express = require("express");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs").promises;
-const dbConnector = require("../../utils/duckdbConnector");
+const dbConnector = require("../../utils/duckdbConnector.js");
 
 const {
   PutObjectCommand,
 } = require("@aws-sdk/client-s3");
 
 const s3 = require("../../utils/s3");
+const AuthMiddleware = require("../../middleware/authentication.js");
+const { allowRoles } = require("../../middleware/rbac.js");
 
 const router = express.Router();
 
@@ -18,6 +20,9 @@ const upload = multer({
 
 const S3_REPORT_KEY = "reports/unmapped-report.csv";
 
+
+router.use(AuthMiddleware);
+router.use(allowRoles("admin", "superadmin"));
 router.post(
   "/",
   upload.fields([
@@ -31,8 +36,8 @@ router.post(
     let connector;
 
     try {
+      const pkg = req?.user?.pkg;
       const files = req.files;
-
       const commFile = files.comm?.[0];
       const issueFile = files.issue?.[0];
       const miFile = files.mi?.[0];
@@ -205,14 +210,14 @@ END AS "Issue Age"
       await s3.send(
         new PutObjectCommand({
           Bucket: process.env.AWS_S3_BUCKET_NAME,
-          Key: S3_REPORT_KEY,
+          Key: `${pkg}/${S3_REPORT_KEY}`,
           Body: reportBuffer,
           ContentType: "text/csv",
         })
       );
 
       console.log(
-        `Report uploaded to S3: ${S3_REPORT_KEY}`
+        `Report uploaded to S3: ${pkg}/${S3_REPORT_KEY}`
       );
 
       // Delete original uploaded input files

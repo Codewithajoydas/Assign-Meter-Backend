@@ -1,20 +1,25 @@
 const express = require("express");
 const router = express.Router();
-
 const {
   GetObjectCommand,
 } = require("@aws-sdk/client-s3");
-
+const AuthMiddleware = require("../../middleware/authentication");
+const { allowRoles } = require("../../middleware/rbac");
 const s3 = require("../../utils/s3");
+
+// make 4 reports for 4 packages 1, 2, 3, 4
 
 const S3_REPORT_KEY = "reports/unmapped-report.csv";
 
+router.use(AuthMiddleware)
+router.use(allowRoles("admin", "superadmin"))
 router.get("/", async (req, res) => {
   try {
+    const pkg = req?.user?.pkg;
     const result = await s3.send(
       new GetObjectCommand({
         Bucket: process.env.AWS_S3_BUCKET_NAME,
-        Key: S3_REPORT_KEY,
+        Key: `${pkg}/${S3_REPORT_KEY}`,
       })
     );
 
@@ -62,11 +67,13 @@ router.get("/", async (req, res) => {
 
 // const get last modified date
 router.get("/last-modified", async (req, res) => {
+  
   try {
+    const pkg = req?.user?.pkg;
     const result = await s3.send(
       new GetObjectCommand({
         Bucket: process.env.AWS_S3_BUCKET_NAME,
-        Key: S3_REPORT_KEY,
+        Key: `${pkg}/${S3_REPORT_KEY}`,
       })
     );
 

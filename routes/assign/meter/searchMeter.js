@@ -3,10 +3,21 @@ const router = express.Router();
 const jwt = require("jsonwebtoken");
 const UserDB = require("../../../models/user");
 const MeterDB = require("../../../models/meter");
+const AuthMiddleware = require("../../../middleware/authentication");
+const { allowRoles } = require("../../../middleware/rbac");
 
+
+router.use(AuthMiddleware);
+router.use(allowRoles("admin", "superadmin", "supervisor"));
 router.get("/", async (req, res) => {
-  const token = req?.headers?.authorization?.split(" ")[1];
   try {
+    const user = req?.user;
+      if (!user) {
+      return res.status(401).json({
+        status: "error",
+        message: "Unauthorized",
+      });
+    }
     const meterNumber = req.query.meterNumber;
     if (!meterNumber) {
       return res.status(400).json({
@@ -14,20 +25,7 @@ router.get("/", async (req, res) => {
         message: "meterNumber is required",
       });
     }
-    if (!token)
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await UserDB.findById(decoded.id);
-    if (!user) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
-    const findMeter = await MeterDB.find({ meterNumber }).populate("supervisor");
+    const findMeter = await MeterDB.find({ meterNumber, pkg: user.pkg }).populate("supervisor");
     if (!findMeter)
       return res
         .status(404)

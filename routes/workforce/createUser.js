@@ -5,53 +5,20 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
 const UserDB = require("../../models/user");
+const AuthMiddleware = require("../../middleware/authentication");
+const { allowRoles } = require("../../middleware/rbac");
 
+router.use(AuthMiddleware)
+router.use(allowRoles("superadmin", "admin"))
 router.post("/", async (req, res) => {
   try {
-    // --------------------------------------------------
-    // 1. Get access token
-    // --------------------------------------------------
-    const authorization = req.headers.authorization;
-
-    if (!authorization?.startsWith("Bearer ")) {
+    const currentUser = req?.user;
+    if(!currentUser){
       return res.status(401).json({
         status: "error",
-        message: "Unauthorized",
+        message: "Authentication required",
       });
     }
-
-    const token = authorization.split(" ")[1];
-
-    // --------------------------------------------------
-    // 2. Verify token
-    // --------------------------------------------------
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    // --------------------------------------------------
-    // 3. Find logged-in user
-    // --------------------------------------------------
-    const currentUser = await UserDB.findById(decoded.id);
-
-    if (!currentUser) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
-
-    // --------------------------------------------------
-    // 4. Check admin permission
-    // --------------------------------------------------
-    if (!currentUser.isAdmin) {
-      return res.status(403).json({
-        status: "error",
-        message: "Only admin allowed",
-      });
-    }
-
     // --------------------------------------------------
     // 5. Get request data
     // --------------------------------------------------
@@ -59,7 +26,7 @@ router.post("/", async (req, res) => {
       name,
       email,
       password,
-      isAdmin,
+      role, 
     } = req.body;
 
     // --------------------------------------------------
@@ -69,7 +36,7 @@ router.post("/", async (req, res) => {
       !name ||
       !email ||
       !password ||
-      isAdmin === undefined
+      !role 
     ) {
       return res.status(400).json({
         status: "error",
@@ -82,6 +49,7 @@ router.post("/", async (req, res) => {
     // --------------------------------------------------
     const existingUser = await UserDB.findOne({
       email,
+      pkg: currentUser.pkg,
     });
 
     if (existingUser) {
@@ -106,7 +74,7 @@ router.post("/", async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      isAdmin,
+      role,
       pkg: currentUser.pkg,
     });
 
@@ -141,5 +109,5 @@ router.post("/", async (req, res) => {
     });
   }
 });
-
+6
 module.exports = router;

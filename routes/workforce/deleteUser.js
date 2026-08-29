@@ -1,47 +1,21 @@
 const express = require("express");
-
 const router = express.Router();
-
 const UserDB = require("../../models/user");
+const AuthMiddleware = require("../../middleware/authentication");
+const { allowRoles } = require("../../middleware/rbac");
 
-const jwt = require("jsonwebtoken");
-
+router.use(AuthMiddleware);
+router.use(allowRoles("superadmin", "admin"));
 // Delete user
 router.delete("/", async (req, res) => {
   try {
-    // Get token from Authorization header
-    const authorization = req.headers.authorization;
-
-    if (!authorization?.startsWith("Bearer ")) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
-
-    const token = authorization.split(" ")[1];
-
-    // Verify token
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
-    );
-
-    // Find logged-in user
-    const currentUser = await UserDB.findById(decoded.id);
-
+    // Get current user
+    const currentUser = req?.user;
+    const pkg = currentUser?.pkg;
     if (!currentUser) {
       return res.status(401).json({
         status: "error",
         message: "Unauthorized",
-      });
-    }
-
-    // Only admin can delete users
-    if (!currentUser.isAdmin) {
-      return res.status(403).json({
-        status: "error",
-        message: "You are not authorized to delete users",
       });
     }
 
@@ -56,7 +30,7 @@ router.delete("/", async (req, res) => {
     }
 
     // Find target user
-    const targetUser = await UserDB.findOne({ email });
+    const targetUser = await UserDB.findOne({ email, pkg });
 
     if (!targetUser) {
       return res.status(404).json({
@@ -82,18 +56,6 @@ router.delete("/", async (req, res) => {
     });
   } catch (error) {
     console.error("Delete user error:", error);
-
-    // Invalid or expired JWT
-    if (
-      error.name === "JsonWebTokenError" ||
-      error.name === "TokenExpiredError"
-    ) {
-      return res.status(401).json({
-        status: "error",
-        message: "Invalid or expired token",
-      });
-    }
-
     return res.status(500).json({
       status: "error",
       message: "Internal server error",

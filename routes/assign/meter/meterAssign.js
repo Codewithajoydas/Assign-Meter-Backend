@@ -1,58 +1,17 @@
-"use strict";
-
 const express = require("express");
 const router = express.Router();
 const MeterDB = require("../../../models/meter");
-const UserDB = require("../../../models/user");
-const jwt = require("jsonwebtoken");
+const { broadcast } = require("../../../config/sse.config");
+const isValidMeterNumber = require("../../../utils/isValidMeterNumber");
+const cleanMeterNumber = require("../../../utils/cleanMeterNumber");
+const AuthMiddleware = require("../../../middleware/authentication");
+const { allowRoles } = require("../../../middleware/rbac");
 
-const {addClient, broadcast} = require("../../../config/sse.config")
-
-
-
-
-// ================= HELPERS =================
-const cleanMeterNumber = (val) => {
-  if (!val) return null;
-  return String(val)
-    .replace(/[\r\n\t]/g, "")
-    .replace(/\s+/g, "")
-    .trim();
-};
-
-
-
-
-
-const isValidMeterNumber = (val) => {
-  return /^[0-9]{7}$/.test(val);
-};
-
-// 
+router.use(AuthMiddleware);
+router.use(allowRoles("admin", "superadmin", "supervisor"));
 router.post("/", async (req, res) => {
   try {
-    const token = req?.headers?.authorization?.split(" ")[1];
-
-    if (!token) {
-      return res.status(401).json({
-        status: "error",
-        message: "Unauthorized",
-      });
-    }
-
-    let decoded;
-
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (err) {
-      return res.status(401).json({
-        status: "error",
-        message: "Invalid token",
-      });
-    }
-
-    const user = await UserDB.findById(decoded.id);
-
+    const user = req?.user;
     if (!user) {
       return res.status(401).json({
         status: "error",
@@ -92,9 +51,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const cleanedMeters = meterNumber
-      .map(cleanMeterNumber)
-      .filter(Boolean);
+    const cleanedMeters = meterNumber.map(cleanMeterNumber).filter(Boolean);
 
     if (cleanedMeters.length === 0) {
       return res.status(400).json({
@@ -103,9 +60,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const invalidMeters = cleanedMeters.filter(
-      (m) => !isValidMeterNumber(m)
-    );
+    const invalidMeters = cleanedMeters.filter((m) => !isValidMeterNumber(m));
 
     if (invalidMeters.length > 0) {
       return res.status(400).json({
@@ -119,7 +74,7 @@ router.post("/", async (req, res) => {
     const existing = await MeterDB.find({
       meterNumber: { $in: uniqueMeters },
       agency,
-      installerId
+      installerId,
     }).select("meterNumber");
 
     if (existing.length > 0) {
@@ -147,7 +102,6 @@ router.post("/", async (req, res) => {
     const inserted = await MeterDB.insertMany(metersData, {
       ordered: false,
     });
-
 
     // ================= SEND LIVE UPDATE =================
     broadcast("meter-added", {

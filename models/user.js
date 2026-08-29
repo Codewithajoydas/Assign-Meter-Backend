@@ -16,11 +16,6 @@ const userSchema = new mongoose.Schema(
       required: true,
       select: false,
     },
-    isAdmin: {
-      type: Boolean,
-      required: true,
-      default: false,
-    },
     pkg: {
       type: String,
       required: true,
@@ -36,6 +31,12 @@ const userSchema = new mongoose.Schema(
         "ASS9",
         "ASS10",
       ],
+    },
+    role:{
+      type: String,
+      required: true,
+      enum: ["admin", "supervisor", "installer", "superadmin", "user"],
+      default: "installer",
     },
     expoNotificationToken:{
       type: String,

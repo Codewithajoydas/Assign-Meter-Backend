@@ -4,16 +4,15 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const UserDB = require("../../models/user");
 
-
 router.post("/", async (req, res) => {
-  const { name, email, password, isAdmin } = req.body;
+  const { name, email, password, pkg } = req.body;
   try {
-    if (!email || !password || !name) {
+    if (!email || !password || !name || !pkg) {
       return res
         .status(400)
         .json({status: "error", message: "Please provide email and password" });
     }
-    const user = await UserDB.findOne({ email });
+    const user = await UserDB.findOne({ email, pkg });
     if (user) {
       return res.status(400).json({status: "error", message: "User already exists." });
       }
@@ -22,7 +21,7 @@ router.post("/", async (req, res) => {
         name,
         email,
         password: hashedPassword,
-        isAdmin,
+        pkg
       });
       res.status(200).json({ status: "success", data: {user: createUser } });
   } catch (error) {

@@ -34,50 +34,54 @@ app.get("/", (req, res) => {
   res.json({ message: "Server is running" });
 });
 
-app.use("/api/signin", require("./routes/auth/signin"));
-app.use("/api/signup", require("./routes/auth/signup"));
-app.use("/api/meterassign", require("./routes/assign/meter/meterAssign"));
-app.use("/api/deletemeter", require("./routes/assign/meter/deleteMeters"));
+app.use("/api/signin", require("./routes/auth/signin")); // rbac no need
+app.use("/api/signup", require("./routes/auth/signup")); // rbac no need
+app.use("/api/meterassign", require("./routes/assign/meter/meterAssign")); // rbac added
+app.use("/api/deletemeter", require("./routes/assign/meter/deleteMeters")); // rbac added
 app.use(
   "/api/getmeterdetails",
-  require("./routes/assign/meter/getMeterDetails"),
+  require("./routes/assign/meter/getMeterDetails"), // rbac added
 );
 app.use("/api/nicassign", require("./routes/assign/nicAssign"));
 app.use("/api/simassign", require("./routes/assign/simAssign"));
 app.use("/api/sealassign", require("./routes/assign/sealAssign"));
-app.use("/api/download", require("./routes/assign/meter/download"));
-app.use("/api/searchmeter", require("./routes/assign/meter/searchMeter"));
+app.use("/api/download", require("./routes/assign/meter/download")); // rbac added
+app.use("/api/searchmeter", require("./routes/assign/meter/searchMeter")); // rbac added
 
-app.use("/api/createuser", require("./routes/workforce/createUser"));
-app.use("/api/deleteuser", require("./routes/workforce/deleteUser"));
-app.use("/api/getusers", require("./routes/workforce/readUser"));
-app.use("/api/updateuser", require("./routes/workforce/updateUser"));
+app.use("/api/createuser", require("./routes/workforce/createUser")); // rbac added
+app.use("/api/deleteuser", require("./routes/workforce/deleteUser")); // rbac added
+app.use("/api/getusers", require("./routes/workforce/readUser")); // rbac added
+app.use("/api/updateuser", require("./routes/workforce/updateUser")); // rbac added
 
 app.use(
   "/api/statusupdate",
   require("./routes/assign/meter/updateMeterStatus"),
-);
+); // rbac added
 app.use("/api/wrongmeter", require("./routes/others/getInvalidMeters"));
 app.use("/api/assign-location", require("./routes/others/meterLocation"));
 app.use("/api/notification", require("./routes/others/notification"));
 app.use(
   "/api/generateReport",
   require("./routes/reports/generate_unmapped_report"),
-);
+); // rbac added
 app.use(
   "/api/last-unmapped-report",
-  require("./routes/reports/get_last_unmapp_report"),
-);
+  require("./routes/reports/get_last_unmapp_report"), 
+);// rbac added
 app.use("/events", require("./routes/sse/sse"));
 app.use("/api/bledevices", require("./routes/others/bleDevices"));
 app.use(
   "/api/generate_unmapped_report_for_supervisor",
   require("./routes/reports/generate_unmapped_report_for_supervisor"),
-);
+); // no need rbac
 
 app.use("/api/pivottabls/getallinstallername", require("./routes/reports/generate_pivot_table"));
 
+
+// others 
+app.use("/api/migration", require("./routes/others/dbmigration"));
+
 const port = process.env.PORT;
 app.listen(port, () => {
-  console.log("server is running on port", port);
+  console.log("💻 Server is running on port", port);
 });
