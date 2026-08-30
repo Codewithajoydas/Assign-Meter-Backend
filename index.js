@@ -11,6 +11,10 @@ app.use(express.json())
 app.use(express.urlencoded({ extended: true }));
 connectToMongo();
 const cors = require("cors");
+const registerWebpush = require("./config/webpush");
+registerWebpush();
+app.use(express.json());
+
 const allowedOrigins = [
   "https://assign-meter-web.vercel.app",
   "http://localhost:3000",
@@ -28,7 +32,6 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json());
 
 app.get("/", (req, res) => {
   res.json({ message: "Server is running" });
@@ -80,6 +83,8 @@ app.use("/api/pivottabls/getallinstallername", require("./routes/reports/generat
 
 // others 
 app.use("/api/migration", require("./routes/others/dbmigration"));
+
+app.use("/api/push",require("./routes/notification/web-push"));
 
 const port = process.env.PORT;
 app.listen(port, () => {

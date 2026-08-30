@@ -41,7 +41,8 @@ router.post("/", async (req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      role:user.role
+      role:user.role,
+      pkg:user.pkg
     };
 
     res.status(200).json({

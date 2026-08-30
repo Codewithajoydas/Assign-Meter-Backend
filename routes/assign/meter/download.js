@@ -7,7 +7,7 @@ const archiver = require("archiver");
 const userDB = require("../../../models/user");
 const AuthMiddleware = require("../../../middleware/authentication");
 const { allowRoles } = require("../../../middleware/rbac");
-
+const formatDate = require("../../../utils/formatDate");
 router.use(AuthMiddleware);
 router.use(allowRoles("admin", "superadmin"));
 
