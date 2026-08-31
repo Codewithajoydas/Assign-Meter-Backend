@@ -24,7 +24,7 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password );
+    const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
       return res.status(401).json({
@@ -41,14 +41,17 @@ router.post("/", async (req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      role:user.role,
-      pkg:user.pkg
+      role: user.role,
+      pkg: user.pkg,
     };
 
-    res.status(200).json({
-      status: "success",
-      data: { token, user: userData },
-    });
+    res
+      .status(200)
+      .cookie("access_token", token, { httpOnly: true })
+      .json({
+        status: "success",
+        data: { token, user: userData },
+      });
   } catch (error) {
     console.error(error.message);
     res.status(500).json({
